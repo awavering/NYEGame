@@ -56,6 +56,10 @@ def _check_card(i, card, draw_things, settings, errors, warnings):
             errors.append(f'{where}: "{field}" is required (non-empty text).')
     if "hint" in card and not isinstance(card["hint"], str):
         errors.append(f'{where}: "hint" must be text.')
+    # "once": never dealt again after it is done. "starter": can be someone's first card.
+    for flag in ("once", "starter"):
+        if flag in card and not isinstance(card[flag], bool):
+            errors.append(f'{where}: "{flag}" must be true or false.')
 
     ctype = card.get("type")
     if ctype not in CARD_TYPES:
@@ -134,6 +138,12 @@ def validate(data):
                     f'card #{i + 1}: secret code "{code}" duplicates card #{seen_codes[code.lower()]}.'
                 )
             seen_codes.setdefault(code.lower(), i + 1)
+
+    for key in ("skip_wait_seconds", "tv_photo_limit"):
+        if key in settings and (not _is_number(settings[key]) or settings[key] < 0):
+            errors.append(f'settings: "{key}" must be a number, 0 or more.')
+    if cards and not any(isinstance(c, dict) and c.get("starter") for c in cards):
+        warnings.append('no card has "starter": true, so a new guest could get any card first.')
 
     handle = str(settings.get("albert_handle", ""))
     if "edit me" in handle.lower():

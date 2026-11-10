@@ -71,12 +71,15 @@ the data it needs in `api_tv()`, and what phones see through `/api/me`.
 
 ### Fake the clock
 `make dev HOURS=0.2` starts the game with midnight 12 minutes away, so you can
-see the late-night card weights and the finale. It uses `.dev-data/`, never
+see the late-night card weights and the finale. `HOURS=0.03` (about 2 minutes)
+is handy for watching the countdown roll into the finale. The automatic finale
+only happens once per game; `make reset` or a new `.dev-data/` brings it back. It uses `.dev-data/`, never
 your real `state.json`. Do not call `datetime.now()` in new code. Use
 `hours_to_midnight()` or `current_phase()` so the fake clock and tests work.
 
 ### Rehearse
-Terminal 1: `make dev`. Terminal 2: `make sim`. Open the TV link in a browser
+Terminal 1: `make dev`. Terminal 2: `make sim` (it uses `PORT` from `.env` too;
+on a Mac, port 5000 is often taken by AirPlay, so `PORT=5001` is a good choice). Open the TV link in a browser
 and the host link on your phone, and try polls, icon match, flash QR, and the
 finale. Do one real round on actual phones too, because the camera and motion
 sensors can't be simulated.
@@ -121,4 +124,5 @@ wipes its disk on restart, point `GAME_DATA_DIR` at a persistent disk. Set
 - **Honor system.** Nothing checks that someone really sent the $1 or used the no-phone box.
 - **Photos are only moderated by hiding.** `approve_photos` makes new photos wait for the host.
 - **One party per data folder.** Use `make reset` or a new `GAME_DATA_DIR` between events.
-- Ideas not built: a results export or photo collage for the finale, per-card stats on the host page, a host "undo points" button, sound or confetti on the TV at milestones, rate-limiting uploads.
+- **The TV spotlights new photos** at most once every 15 seconds (`SPOT_GAP_MS` in `tv.html`), so a busy party doesn't hide the scoreboard.
+- Ideas not built: a results export, per-card stats on the host page, a host "undo points" button, sound on the TV at milestones, rate-limiting uploads.

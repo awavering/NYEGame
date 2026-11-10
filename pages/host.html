@@ -33,6 +33,8 @@
     <button id="launch">Launch</button>
   </div>
   <div class="row"><span id="pollstate" class="dim-t"></span><button class="dim" id="closepoll">Close poll</button><button class="dim" id="clearpoll">Clear from TV</button></div>
+  <h2 style="margin-top:14px">Poll log</h2>
+  <table id="polllog"></table>
 </section>
 
 <section>
@@ -46,7 +48,13 @@
     <input id="fbonus" type="number" value="3" style="width:60px"> pts
     <button id="flash">Flash QR on TV</button>
   </div>
-  <div class="row"><button id="finale">Finale screen: ON</button><button class="dim" id="finaleoff">Finale: OFF</button></div>
+  <div class="row"><span class="dim-t">The midnight countdown and finale start by themselves at midnight.</span></div>
+  <div class="row">
+    <button class="red" id="endearly">End the game early 🎉</button>
+    <button class="dim" id="finale">Show midnight finale now</button>
+    <button class="dim" id="finaleoff">Finale off (keep playing)</button>
+    <span class="dim-t" id="finalestate"></span>
+  </div>
 </section>
 
 <section>
@@ -94,7 +102,17 @@ async function load() {
     document.querySelectorAll('#presets button').forEach(b => b.onclick = () => call('/api/host/poll', d.presets[+b.dataset.i]));
   }
   $('#pollstate').textContent = d.poll ? `${d.poll.open ? 'OPEN' : 'closed'}: "${d.poll.question}" (${d.poll.count} answers)` : 'No poll running';
+
+  // Poll log: every poll tonight with its result, and a button to put it back on the TV.
+  $('#polllog').innerHTML = d.poll_log.map(p => `<tr>
+      <td><b>${esc(p.question)}</b><div class="dim-t">${esc(pollResult(p))}</div></td>
+      <td class="dim-t">${p.count} answer${p.count === 1 ? '' : 's'}</td>
+      <td>${p.on_tv ? `<span style="color:#3ddc97">${p.open ? 'Open, on TV' : 'On TV'}</span>`
+                    : `<button class="dim" data-show="${esc(p.id)}">Show on TV</button>`}</td></tr>`).join('')
+    || '<tr><td class="dim-t">No polls yet</td></tr>';
+  document.querySelectorAll('[data-show]').forEach(b => b.onclick = () => call('/api/host/poll/show', { id: b.dataset.show }));
   $('#iconstate').textContent = d.icon ? `${d.icon.found}/${d.icon.total} found` : '';
+  $('#finalestate').textContent = d.finale ? (d.finale_kind === 'thanks' ? 'Showing: Thanks for playing' : 'Showing: Happy New Year') : '';
 
   $('#photos').innerHTML = d.photos.map(p => `<div class="ph ${p.status}" data-id="${p.id}" data-s="${p.status}"><img src="${p.url}"><div><b>${esc(p.name)}</b> · ${p.status}</div></div>`).join('') || '<span class="dim-t">No photos yet</span>';
   document.querySelectorAll('.ph').forEach(el => el.onclick = () => call('/api/host/photo', { id: el.dataset.id, status: el.dataset.s === 'visible' ? 'hidden' : 'visible' }));
@@ -103,13 +121,27 @@ async function load() {
   $('#answers').innerHTML = d.answers.map(a => `<tr><td><b>${esc(a.name)}</b></td><td class="dim-t">${esc(a.prompt)}</td><td>${esc(a.answer)}</td></tr>`).join('');
 }
 
+/* One-line result for the poll log: the winning option, the average, or the top words. */
+function pollResult(p) {
+  if (!p.count) return 'No answers';
+  if (p.kind === 'choice') {
+    const best = Math.max(...Object.values(p.counts));
+    return 'Top: ' + p.options.filter(o => p.counts[o] === best).join(' / ') + ` (${best})`;
+  }
+  if (p.kind === 'number') return `Average ${p.avg} · low ${p.min} · high ${p.max}`;
+  return 'Top: ' + p.words.slice(0, 3).map(([w, n]) => n > 1 ? `${w} ×${n}` : w).join(', ');
+}
+
 $('#launch').onclick = () => call('/api/host/poll', { question: $('#q').value, kind: $('#kind').value, options: $('#opts').value.split(',') });
 $('#closepoll').onclick = () => call('/api/host/poll/close');
 $('#clearpoll').onclick = () => call('/api/host/poll/clear');
 $('#icons').onclick = () => call('/api/host/icons/start');
 $('#iconsend').onclick = () => call('/api/host/icons/clear');
 $('#flash').onclick = () => call('/api/host/flash', { seconds: +$('#fsec').value, bonus: +$('#fbonus').value });
-$('#finale').onclick = () => call('/api/host/finale', { on: true });
+// Both finales hide everyone's cards, so ask first (easy to tap by accident).
+// "Thanks" shows the same final scores and photos, with a thank-you instead of Happy New Year.
+$('#endearly').onclick = () => { if (confirm('End the game for everyone and show the final scores?')) call('/api/host/finale', { on: true, kind: 'thanks' }); };
+$('#finale').onclick = () => { if (confirm('Show the Happy New Year finale now?')) call('/api/host/finale', { on: true, kind: 'midnight' }); };
 $('#finaleoff').onclick = () => call('/api/host/finale', { on: false });
 $('#reset').onclick = () => { if (confirm('Wipe all players, scores and photos?')) call('/api/host/reset'); };
 $('#printlink').href = '/host/print?key=' + encodeURIComponent(key);

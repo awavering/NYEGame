@@ -13,6 +13,7 @@ import argparse
 import io
 import json
 import random
+import sys
 import threading
 import time
 import urllib.error
@@ -67,9 +68,14 @@ def upload(base, pid, card, label):
     )
 
 
-def play_card(base, pid, name, card, decline_rate):
+def play_card(base, pid, name, card, decline_rate, can_skip=True):
     cid, ctype = card["id"], card["type"]
-    if ctype in ("secret_qr", "timer") or random.random() < decline_rate:
+    # The server makes you wait between skips, so bots only skip when allowed.
+    # (Bots can't scan QR codes or wait 15 minutes, so those they always skip.)
+    if can_skip and (ctype in ("secret_qr", "timer") or random.random() < decline_rate):
+        return call(base, "/api/card/respond", {"pid": pid, "card_id": cid, "action": "decline"})
+    if ctype in ("secret_qr", "timer"):  # stuck until the skip wait is over
+        return {}
         return call(base, "/api/card/respond", {"pid": pid, "card_id": cid, "action": "decline"})
     if ctype in ("photo", "draw", "light"):
         return upload(base, pid, card, f"{name}: {card['prompt'][:40]}")
@@ -91,8 +97,16 @@ def poll_answer(poll):
     return random.choice(WORDS)
 
 
+failures = []  # bots that could not play at all; main() exits non-zero if any
+
+
 def bot(base, name, stop_at, pace, decline_rate):
-    pid = call(base, "/api/join", {"name": name})["pid"]
+    try:
+        pid = call(base, "/api/join", {"name": name})["pid"]
+    except Exception as exc:  # wrong address, server not running, or not our server
+        failures.append(name)
+        print(f"  {name}: could not join at {base}: {exc!r}")
+        return
     while time.time() < stop_at:
         time.sleep(random.uniform(0.5, 1.5) * pace)
         me = call(base, f"/api/me?pid={pid}")
@@ -102,7 +116,7 @@ def bot(base, name, stop_at, pace, decline_rate):
         if icon and not icon["found"]:
             call(base, "/api/icon/found", {"pid": pid})
         if me.get("card"):
-            result = play_card(base, pid, name, me["card"], decline_rate)
+            result = play_card(base, pid, name, me["card"], decline_rate, can_skip=not me.get("skip_wait"))
             if "error" in result:
                 print(f"  {name}: {result['error']}")
 
@@ -130,7 +144,12 @@ def main():
             t.join()
     except KeyboardInterrupt:
         print("stopped")
+    if failures:
+        print(f"\n{len(failures)} of {len(threads)} bots could not join {args.url}.")
+        print("Is the server running on that address? (On a Mac, port 5000 is often AirPlay: use --url.)")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

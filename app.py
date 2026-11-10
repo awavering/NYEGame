@@ -18,6 +18,7 @@ Map of this file (top to bottom):
   Player API   what phones call (/api/me, /api/card/*, /api/poll/answer, ...)
   TV API       /api/tv: everything the big screen shows, in one response
   Host API     /api/host/*: polls, icon match, flash QR, finale, photo hiding
+               (the midnight finale also switches itself on: check_midnight())
 
 Adding a card type (full checklist in DEVELOPMENT.md):
   1. tools/check_cards.py  add the name to CARD_TYPES (and any new fields)
@@ -29,6 +30,7 @@ Adding a card type (full checklist in DEVELOPMENT.md):
 
 import io
 import json
+import math
 import os
 import random
 import socket
@@ -61,6 +63,10 @@ PORT = int(os.environ.get("PORT", "5000"))
 TZ = ZoneInfo(os.environ.get("TZ_NAME", "America/Denver"))
 # For testing you can fake the countdown, e.g. MIDNIGHT_ISO=2026-10-16T00:00:00
 MIDNIGHT_ISO = os.environ.get("MIDNIGHT_ISO")
+# How long a closed poll's results stay on the TV before it goes back to normal.
+POLL_RESULTS_SECONDS = 20
+# How many old polls the host page remembers.
+POLL_LOG_SIZE = 50
 
 ICONS = [
     "🦄",
@@ -147,10 +153,12 @@ def fresh_state():
         "history": [],  # every completed / declined / bonus event
         "assigned": {},  # card_id -> times handed out
         "photos": [],  # uploaded pictures
-        "poll": None,
+        "poll": None,  # the current poll (the one the TV can show)
+        "poll_log": [],  # earlier polls, oldest first, so the host can show them again
         "icon_sync": None,
         "flash": None,
-        "finale": False,
+        "finale": False,  # False, "midnight" (Happy New Year) or "thanks" (host ended early)
+        "midnight_done": False,  # the automatic midnight finale has happened
     }
 
 
@@ -194,6 +202,23 @@ def hours_to_midnight():
     return (target - now).total_seconds() / 3600
 
 
+def check_midnight():
+    """At midnight, switch on the finale by itself (once). Call while holding lock.
+
+    It only happens once, so the host can turn the finale off afterwards and
+    keep playing. If the host already ended the game early, that stays."""
+    if not state["midnight_done"] and hours_to_midnight() <= 0:
+        state["midnight_done"] = True
+        if not state["finale"]:
+            state["finale"] = "midnight"
+        save()
+
+
+def finale_kind():
+    # Older saved games stored True, which meant the midnight finale.
+    return "thanks" if state["finale"] == "thanks" else "midnight"
+
+
 def current_phase():
     h = hours_to_midnight()
     if h >= 2:
@@ -206,20 +231,33 @@ def current_phase():
 # --------------------------------------------------------------------------
 # Handing out cards
 # --------------------------------------------------------------------------
-def pick_card(pid):
+def pick_card(pid, first=False):
     """Choose the player's next card and store it as p["current"].
 
     A player sees every card once before any repeats. Chance = the card's
     weight for the current phase of the night (cards.json "weights"), divided
     by (1 + 0.5 x times it has already been handed out), which spreads the
-    deck evenly across guests."""
+    deck evenly across guests.
+
+    first=True (just joined): only "starter" cards, so nobody's first task is
+    "put your phone in a box for 15 minutes"."""
     p = state["players"][pid]
     pool = load_cards()["cards"]
     unseen = [c for c in pool if c["id"] not in p["seen"]]
-    if not unseen:  # they have done everything: start over
-        p["seen"] = {}
-        unseen = pool
+    if not unseen:  # they have seen everything: start over...
+        # ...except "once" cards they already did (like "Send Albert $1"),
+        # which stay remembered so they never come back.
+        p["seen"] = {
+            cid: result
+            for cid, result in p["seen"].items()
+            if result == "done" and (card_by_id(cid) or {}).get("once")
+        }
+        unseen = [c for c in pool if c["id"] not in p["seen"]] or pool
     phase = current_phase()
+    if first:
+        starters = [c for c in unseen if c.get("starter") and c.get("weights", {}).get(phase, 1) > 0]
+        if starters:  # no starter cards in cards.json? then any card will do
+            unseen = starters
     weights = []
     for c in unseen:
         w = c.get("weights", {}).get(phase, 1)
@@ -288,6 +326,9 @@ def finish(pid, card, result, answer=None, photo_id=None, bonus=0, note=None):
     points = (card.get("points", 1) + bonus) if result == "done" else 0
     p["points"] += points
     p["seen"][card["id"]] = result
+    if result == "done":
+        # Doing a card earns back the right to skip straight away.
+        p.pop("skip_ready_at", None)
     state["history"].append(
         {
             "t": time.time(),
@@ -327,6 +368,15 @@ def add_event(pid, text, points):
             "points": points,
         }
     )
+
+
+def skip_wait(p):
+    """Whole seconds before this player may skip again (0 = they can now).
+
+    Skipping is free once, but a second skip in a row has to wait
+    (settings.skip_wait_seconds). Without this, the best strategy was to
+    skip every card that takes effort and farm the quick ones."""
+    return max(0, math.ceil(p.get("skip_ready_at", 0) - time.time()))
 
 
 def get_player(pid):
@@ -465,7 +515,7 @@ def api_join():
             "current": None,
             "joined": time.time(),
         }
-        pick_card(pid)
+        pick_card(pid, first=True)
         save()
     return jsonify({"pid": pid})
 
@@ -502,7 +552,10 @@ def api_me():
         p = state["players"].get(pid)
         if not p:
             return jsonify({"error": "unknown_player"}), 404
+        check_midnight()
         ensure_current(p, pid)
+        # Place on the leaderboard (ties share a place), for the finale screen.
+        rank = 1 + sum(1 for other in state["players"].values() if other["points"] > p["points"])
         return jsonify(
             {
                 "name": p["name"],
@@ -510,7 +563,10 @@ def api_me():
                 "card": None if state["finale"] else public_card(p),
                 "poll": poll_view_for(pid),
                 "icon": icon_view_for(pid),
-                "finale": state["finale"],
+                "finale": bool(state["finale"]),
+                "finale_kind": finale_kind(),
+                "rank": rank,
+                "skip_wait": skip_wait(p),
                 "now": time.time(),
             }
         )
@@ -533,6 +589,10 @@ def api_respond():
     with lock:
         p, cur, card = current_card_or_400(pid, card_id)
         if action == "decline":
+            wait = skip_wait(p)
+            if wait:
+                return jsonify({"error": f"Give this one a try! You can skip again in {wait}s."}), 400
+            p["skip_ready_at"] = time.time() + settings().get("skip_wait_seconds", 20)
             return jsonify(finish(pid, card, "declined"))
 
         t = card["type"]
@@ -730,6 +790,32 @@ def poll_summary(poll):
     return out
 
 
+def poll_on_tv():
+    """Is the current poll on the TV right now? Call while holding lock.
+
+    An open poll always is. A closed poll shows its final results for
+    POLL_RESULTS_SECONDS, then leaves the TV by itself, unless the host
+    brought it back from the poll log ("pinned"), which stays until hidden."""
+    poll = state["poll"]
+    if not poll:
+        return False
+    if poll["open"] or poll.get("pinned"):
+        return True
+    return time.time() - poll.get("closed_at", 0) <= POLL_RESULTS_SECONDS
+
+
+def retire_poll():
+    """Move the current poll into the log (it is being replaced or hidden)."""
+    poll = state["poll"]
+    if poll:
+        poll["open"] = False
+        poll.setdefault("closed_at", time.time())
+        poll.pop("pinned", None)
+        state["poll_log"].append(poll)
+        del state["poll_log"][:-POLL_LOG_SIZE]  # keep only the most recent ones
+    state["poll"] = None
+
+
 def category_stats():
     cats = {}
     for h in state["history"]:
@@ -754,6 +840,7 @@ def category_stats():
 @app.get("/api/tv")
 def api_tv():
     with lock:
+        check_midnight()
         hist = state["history"]
         done = sum(1 for h in hist if h["result"] == "done")
         declined = sum(1 for h in hist if h["result"] == "declined")
@@ -761,7 +848,7 @@ def api_tv():
         resolved = done + declined
         most, least = category_stats()
 
-        limit = settings().get("tv_photo_limit", 14)
+        limit = settings().get("tv_photo_limit", 8)
         visible = [ph for ph in state["photos"] if ph["status"] == "visible"]
         photos = [
             {"id": ph["id"], "url": "/photos/" + ph["file"], "name": ph["name"], "prompt": ph["prompt"]}
@@ -781,7 +868,7 @@ def api_tv():
                 if not best_g or g > best_g["g"]:
                     best_g = {"name": h["name"], "g": g}
 
-        poll = poll_summary(state["poll"]) if state["poll"] else None
+        poll = poll_summary(state["poll"]) if poll_on_tv() else None
 
         icon = None
         sync = state["icon_sync"]
@@ -800,7 +887,7 @@ def api_tv():
             }
 
         feed = []
-        for h in hist[-6:][::-1]:
+        for h in hist[-10:][::-1]:
             feed.append(
                 {"name": h["name"], "result": h["result"], "prompt": h["prompt"], "points": h["points"]}
             )
@@ -822,9 +909,16 @@ def api_tv():
                 "icon": icon,
                 "flash": flash,
                 "feed": feed,
-                "finale": state["finale"],
+                "finale": bool(state["finale"]),
+                "finale_kind": finale_kind(),
+                # Every visible photo, for the finale slideshow (only sent then).
+                "finale_photos": [{"url": "/photos/" + ph["file"], "name": ph["name"]} for ph in visible]
+                if state["finale"]
+                else [],
                 "photo_total": len(visible),
                 "minutes_to_midnight": round(hours_to_midnight() * 60),
+                # For the big countdown in the last minute.
+                "seconds_to_midnight": round(hours_to_midnight() * 3600, 1),
                 "join_url": base_url() + "/play",
             }
         )
@@ -857,12 +951,18 @@ def host_data():
                     if h["result"] == "done" and h["answer"] is not None
                 ][:60],
                 "poll": poll_summary(state["poll"]) if state["poll"] else None,
+                # Every poll tonight, newest first, the current one included.
+                "poll_log": [
+                    {**poll_summary(p), "on_tv": p is state["poll"] and poll_on_tv()}
+                    for p in ([state["poll"]] if state["poll"] else []) + state["poll_log"][::-1]
+                ],
                 "icon": (
                     {"found": len(state["icon_sync"]["found"]), "total": len(state["icon_sync"]["assign"])}
                     if state["icon_sync"]
                     else None
                 ),
-                "finale": state["finale"],
+                "finale": bool(state["finale"]),
+                "finale_kind": finale_kind(),
                 "presets": load_cards().get("poll_presets", []),
                 "secrets": [
                     {"location": c.get("location", ""), "code": c["code"], "prompt": c["prompt"]}
@@ -887,6 +987,7 @@ def host_poll():
     if kind == "choice" and len(options) < 2:
         return jsonify({"error": "Choice polls need at least two options."}), 400
     with lock:
+        retire_poll()  # the previous poll (and its answers) goes into the log
         state["poll"] = {
             "id": uuid.uuid4().hex[:6],
             "question": question,
@@ -894,6 +995,7 @@ def host_poll():
             "options": options,
             "answers": {},
             "open": True,
+            "t": time.time(),
         }
         save()
     return jsonify({"ok": True})
@@ -901,14 +1003,30 @@ def host_poll():
 
 @app.post("/api/host/poll/<action>")
 def host_poll_action(action):
+    """close: stop taking answers. clear: take it off the TV (into the log).
+    show: put a poll's final results back on the TV, by id, until cleared."""
     check_host()
-    if action not in ("close", "clear"):
+    if action not in ("close", "clear", "show"):
         return jsonify({"error": "Unknown action."}), 400
     with lock:
         if action == "close" and state["poll"]:
             state["poll"]["open"] = False
+            state["poll"]["closed_at"] = time.time()
         elif action == "clear":
-            state["poll"] = None
+            retire_poll()
+        elif action == "show":
+            poll_id = (request.get_json(silent=True) or {}).get("id")
+            current = state["poll"]
+            if not (current and current["id"] == poll_id):
+                old = next((p for p in state["poll_log"] if p["id"] == poll_id), None)
+                if not old:
+                    return jsonify({"error": "That poll isn't in the log."}), 404
+                retire_poll()
+                state["poll_log"].remove(old)
+                state["poll"] = current = old
+            # A re-shown poll is closed (no new answers) and stays on the TV.
+            if not current["open"]:
+                current["pinned"] = True
         save()
     return jsonify({"ok": True})
 
@@ -971,8 +1089,13 @@ def host_flash():
 def host_finale():
     check_host()
     data = request.get_json(silent=True) or {}
+    # kind "midnight" = Happy New Year; "thanks" = ending early, same stats
+    # but a "Thanks for playing!" celebration instead.
+    kind = data.get("kind", "midnight")
+    if kind not in ("midnight", "thanks"):
+        return jsonify({"error": "Unknown finale kind."}), 400
     with lock:
-        state["finale"] = bool(data.get("on"))
+        state["finale"] = kind if data.get("on") else False
         if not state["finale"]:
             for pid, p in state["players"].items():
                 if not p.get("current"):
