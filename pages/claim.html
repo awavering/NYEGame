@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scan</title>
+<style>
+  body { margin:0; background:#12101f; color:#f4f1ff; font-family:system-ui,-apple-system,sans-serif; display:flex; min-height:100vh; align-items:center; justify-content:center; padding:20px; text-align:center; }
+  .card { background:#1f1b36; border-radius:20px; padding:28px; max-width:420px; width:100%; }
+  h1 { font-size:28px; margin:0 0 10px; }
+  a { display:inline-block; margin-top:16px; background:#ffcc33; color:#222; font-weight:800; padding:14px 20px; border-radius:14px; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="card"><h1 id="t">Checking...</h1><p id="m"></p><a id="back" href="/play">Back to the game</a></div>
+<script>
+/* This page opens when someone scans a secret QR (/s/<code>) or the flash QR (/f/<token>).
+   It reads the player id this phone saved when joining and tells the server. */
+const parts = location.pathname.split('/').filter(Boolean);
+const kind = parts[0], value = decodeURIComponent(parts[1] || '');
+const pid = localStorage.getItem('pid');
+(async () => {
+  if (!pid) {
+    document.getElementById('t').textContent = 'Join the game first';
+    document.getElementById('m').textContent = 'Open the game, pick a name, then scan this code again.';
+    return;
+  }
+  const url = kind === 'f' ? '/api/flash/claim' : '/api/secret';
+  const body = kind === 'f' ? { pid, token: value } : { pid, code: value };
+  let r;
+  try { r = await (await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })).json(); }
+  catch (e) { r = { error: 'Connection problem. Scan again.' }; }
+  document.getElementById('t').textContent = r.error ? 'Hmm...' : (r.points_earned ? '🎉 Found it!' : '👍');
+  document.getElementById('m').textContent = r.error || (r.note || 'Done!') + (r.points_earned ? '  +' + r.points_earned + ' points' : '');
+})();
+</script>
+</body>
+</html>

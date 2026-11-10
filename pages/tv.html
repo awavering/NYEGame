@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Party Game TV</title>
+<style>
+  :root { --bg:#0e0c1d; --panel:#1b1735; --ink:#f4f1ff; --dim:#a9a3c9; --accent:#ffcc33; --good:#3ddc97; --bad:#ff6b81; --pink:#ff5fa2; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; margin:0; overflow:hidden; }
+  body { background:radial-gradient(circle at 50% 0%, #26204d 0%, var(--bg) 60%); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  #layout { display:grid; grid-template-columns:minmax(300px,24vw) 1fr minmax(320px,26vw); grid-template-rows:1fr auto; height:100vh; gap:16px; padding:16px; }
+  .panel { background:rgba(27,23,53,.9); border-radius:24px; padding:20px; overflow:hidden; }
+  h1 { margin:0 0 4px; font-size:clamp(22px,2.2vw,40px); }
+  .label { text-transform:uppercase; letter-spacing:.14em; font-size:clamp(11px,.9vw,16px); color:var(--dim); font-weight:700; }
+  .left { display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; }
+  .left img { width:100%; max-width:340px; background:#fff; border-radius:18px; padding:8px; }
+  .url { font-family:ui-monospace,Menlo,monospace; font-size:clamp(12px,1.1vw,20px); color:var(--accent); word-break:break-all; }
+  .count { font-size:clamp(36px,4vw,72px); font-weight:900; line-height:1; }
+  .clock { margin-top:auto; color:var(--dim); font-size:clamp(14px,1.3vw,24px); }
+  #stage { position:relative; overflow:hidden; border-radius:24px; border:2px dashed rgba(255,255,255,.08); }
+  .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:clamp(18px,2vw,34px); text-align:center; padding:30px; }
+  .bounce { position:absolute; left:0; top:0; width:220px; height:250px; background:#fff; border-radius:14px; padding:8px; color:#222; box-shadow:0 10px 30px rgba(0,0,0,.5); will-change:transform; }
+  .bounce img { width:100%; height:182px; object-fit:cover; border-radius:8px; display:block; }
+  .bounce .cap { padding-top:6px; line-height:1.15; }
+  .bounce .cap b { display:block; font-size:17px; }
+  .bounce .cap span { display:block; font-size:12px; color:#555; height:30px; overflow:hidden; }
+  .right { display:flex; flex-direction:column; gap:14px; }
+  .stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; text-align:center; }
+  .stat .n { font-size:clamp(28px,3.2vw,58px); font-weight:900; line-height:1; }
+  .stat.good .n { color:var(--good); } .stat.bad .n { color:var(--bad); }
+  .stat .sub { color:var(--dim); font-size:clamp(11px,.9vw,16px); }
+  .cats { display:grid; gap:6px; font-size:clamp(13px,1.2vw,22px); }
+  .cats b { color:var(--accent); }
+  .board { list-style:none; margin:0; padding:0; font-size:clamp(15px,1.5vw,28px); }
+  .board li { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.07); }
+  .board li:first-child { color:var(--accent); font-weight:800; }
+  #feed { grid-column:1 / -1; display:flex; gap:12px; overflow:hidden; height:54px; align-items:center; font-size:clamp(13px,1.2vw,22px); }
+  #feed span { background:rgba(27,23,53,.9); padding:10px 16px; border-radius:999px; white-space:nowrap; }
+  #overlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(8,6,20,.88); z-index:20; padding:4vw; }
+  #overlay.show { display:flex; }
+  .big { text-align:center; max-width:1200px; width:100%; }
+  .big h2 { font-size:clamp(30px,4.6vw,84px); margin:0 0 20px; }
+  .bar { display:flex; align-items:center; gap:16px; margin:10px 0; font-size:clamp(18px,2.4vw,40px); text-align:left; }
+  .bar .name { width:28%; } .bar .track { flex:1; background:#2a2552; border-radius:12px; height:clamp(28px,3vw,54px); overflow:hidden; }
+  .bar .fill { background:linear-gradient(90deg,var(--pink),var(--accent)); height:100%; transition:width .6s; } .bar .num { width:3ch; }
+  .chip { display:inline-block; background:#2a2552; padding:8px 16px; border-radius:999px; margin:6px; font-size:clamp(16px,2vw,34px); }
+  .chip i { color:var(--accent); font-style:normal; margin-left:8px; }
+  .huge { font-size:clamp(60px,11vw,220px); font-weight:900; color:var(--accent); line-height:1; }
+  #flashqr { background:#fff; padding:14px; border-radius:20px; width:min(42vh,420px); }
+  .meter { height:14px; background:#2a2552; border-radius:99px; margin:16px auto 0; width:min(60vw,600px); overflow:hidden; }
+  .meter div { height:100%; background:var(--pink); transition:width 1s linear; }
+  .podium { display:flex; justify-content:center; gap:20px; align-items:flex-end; margin-top:20px; }
+  .podium div { background:#2a2552; border-radius:16px; padding:18px 26px; font-size:clamp(20px,2.6vw,44px); }
+  .podium .p1 { background:var(--accent); color:#222; font-weight:900; transform:scale(1.2); }
+  .pop { animation:pop .6s ease-out; } @keyframes pop { from { opacity:0; scale:.3; } to { opacity:1; scale:1; } }
+</style>
+</head>
+<body>
+<div id="layout">
+  <section class="panel left">
+    <h1 id="title">Party Game</h1>
+    <div class="label">Scan to play</div>
+    <img id="qr" src="/qr/join.png" alt="Join QR code">
+    <div class="url" id="joinurl"></div>
+    <div><div class="count" id="players">0</div><div class="label">players</div></div>
+    <div class="clock" id="clock"></div>
+  </section>
+
+  <section id="stage"><div class="empty" id="empty">Scan the QR code to join.<br>Photos you take will bounce around here.</div></section>
+
+  <section class="panel right">
+    <div class="stats">
+      <div class="stat"><div class="n" id="assigned">0</div><div class="label">Assigned</div></div>
+      <div class="stat good"><div class="n" id="done">0</div><div class="label">Completed</div><div class="sub" id="donepct"></div></div>
+      <div class="stat bad"><div class="n" id="declined">0</div><div class="label">Declined</div><div class="sub" id="declpct"></div></div>
+    </div>
+    <div class="cats" id="cats"></div>
+    <div><div class="label">Leaderboard</div><ol class="board" id="board" style="padding-left:0"></ol></div>
+  </section>
+
+  <div id="feed"></div>
+</div>
+<div id="overlay"><div class="big" id="overlaybody"></div></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------------- bouncing photo cards (DVD-logo style) ---------------- */
+const stage = $('#stage');
+const bouncers = new Map();     // photo id -> {el, x, y, vx, vy}
+const CARD_W = 220, CARD_H = 250;
+
+function syncPhotos(list) {
+  const ids = new Set(list.map(p => p.id));
+  for (const [id, b] of bouncers) if (!ids.has(id)) { b.el.remove(); bouncers.delete(id); }
+  for (const p of list) if (!bouncers.has(p.id)) addBouncer(p);
+  $('#empty').style.display = list.length ? 'none' : 'flex';
+}
+function addBouncer(p) {
+  const el = document.createElement('div');
+  el.className = 'bounce pop';
+  el.innerHTML = `<img src="${esc(p.url)}" alt=""><div class="cap"><b>${esc(p.name)}</b><span>${esc(p.prompt)}</span></div>`;
+  stage.appendChild(el);
+  const W = stage.clientWidth, H = stage.clientHeight;
+  const speed = 60 + Math.random() * 70, angle = Math.random() * Math.PI * 2;
+  bouncers.set(p.id, { el, x: Math.random() * Math.max(1, W - CARD_W), y: Math.random() * Math.max(1, H - CARD_H),
+                       vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed });
+}
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const W = stage.clientWidth, H = stage.clientHeight;
+  for (const b of bouncers.values()) {
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    if (b.x < 0) { b.x = 0; b.vx = Math.abs(b.vx); }
+    if (b.x > W - CARD_W) { b.x = Math.max(0, W - CARD_W); b.vx = -Math.abs(b.vx); }
+    if (b.y < 0) { b.y = 0; b.vy = Math.abs(b.vy); }
+    if (b.y > H - CARD_H) { b.y = Math.max(0, H - CARD_H); b.vy = -Math.abs(b.vy); }
+    b.el.style.transform = `translate(${b.x}px, ${b.y}px)`;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------------- full-screen overlays: poll, flash QR, icon match, finale ---------------- */
+function overlay(html) {
+  const o = $('#overlay');
+  if (!html) { o.classList.remove('show'); return; }
+  o.classList.add('show'); $('#overlaybody').innerHTML = html;
+}
+
+function pollHtml(p) {
+  let body = '';
+  if (p.kind === 'choice') {
+    const max = Math.max(1, ...Object.values(p.counts));
+    body = p.options.map(o => `<div class="bar"><div class="name">${esc(o)}</div><div class="track"><div class="fill" style="width:${100 * p.counts[o] / max}%"></div></div><div class="num">${p.counts[o]}</div></div>`).join('');
+  } else if (p.kind === 'number') {
+    body = p.numbers.length
+      ? `<div class="huge">${p.avg}</div><div class="label">average · low ${p.min} · high ${p.max}</div><div style="margin-top:14px">${p.numbers.map(n => `<span class="chip">${n}</span>`).join('')}</div>`
+      : '';
+  } else {
+    body = p.words.map(([w, n]) => `<span class="chip">${esc(w)}${n > 1 ? `<i>×${n}</i>` : ''}</span>`).join('');
+  }
+  return `<h2>${esc(p.question)}</h2>${body}<p class="label" style="margin-top:24px">${p.count} answer${p.count === 1 ? '' : 's'}${p.open ? ' · answer on your phone now!' : ' · closed'}</p>`;
+}
+
+function showOverlay(d) {
+  if (d.finale) {
+    const top = d.leaderboard.slice(0, 3);
+    return `<h2>🎆 HAPPY NEW YEAR! 🎆</h2><div class="label">Final scores</div>
+      <div class="podium">${top.map((p, i) => `<div class="${i === 0 ? 'p1' : ''}">${['🥇','🥈','🥉'][i]} ${esc(p.name)}<br>${p.points}</div>`).join('')}</div>
+      <p class="label" style="margin-top:28px">${d.completed} tasks completed · ${d.photo_total} photos</p>`;
+  }
+  if (d.flash) {
+    const pct = Math.max(0, 100 * d.flash.remaining / 60);
+    return `<h2>⚡ FLASH QR! +${d.flash.bonus} points ⚡</h2>
+      <img id="flashqr" src="/qr/flash/${d.flash.token}.png" alt="">
+      <div class="meter"><div style="width:${Math.min(100, pct)}%"></div></div>
+      <p class="label" style="margin-top:16px">${d.flash.remaining}s left · ${d.flash.claimed} grabbed it</p>`;
+  }
+  if (d.poll) return pollHtml(d.poll);
+  return '';
+}
+
+/* ---------------- main refresh ---------------- */
+let lastOverlay = '';
+async function tick() {
+  let d;
+  try { d = await (await fetch('/api/tv')).json(); } catch (e) { return; }
+
+  $('#joinurl').textContent = d.join_url.replace(/^https?:\/\//, '');
+  $('#players').textContent = d.players;
+  $('#assigned').textContent = d.assigned;
+  $('#done').textContent = d.completed; $('#donepct').textContent = d.completed_pct + '%';
+  $('#declined').textContent = d.declined; $('#declpct').textContent = d.declined_pct + '%';
+
+  const m = d.minutes_to_midnight;
+  $('#clock').textContent = m > 0 ? 'Midnight in ' + Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : '🎉 Happy New Year!';
+
+  const cats = [];
+  if (d.most_popular) cats.push(`Most popular: <b>${esc(d.most_popular.name)}</b> (${d.most_popular.done} done)`);
+  if (d.least_popular) cats.push(`Most skipped: <b>${esc(d.least_popular.name)}</b> (${d.least_popular.declined} of ${d.least_popular.total})`);
+  if (d.best_g) cats.push(`Top G-force: <b>${esc(d.best_g.name)}</b> (${d.best_g.g.toFixed(2)} g)`);
+  $('#cats').innerHTML = cats.join('') ? cats.map(c => `<div>${c}</div>`).join('') : '<div class="label">Waiting for the first task...</div>';
+
+  $('#board').innerHTML = d.leaderboard.map(p => `<li><span>${esc(p.name)}</span><span>${p.points}</span></li>`).join('') || '<li><span class="label">No players yet</span></li>';
+
+  $('#feed').innerHTML = d.feed.map(f => {
+    const verb = f.result === 'done' ? '✅ completed' : f.result === 'declined' ? '⏭️ skipped' : '⭐';
+    return `<span><b>${esc(f.name)}</b> ${verb} ${esc(f.prompt)}</span>`;
+  }).join('');
+
+  syncPhotos(d.photos);
+
+  if (d.icon && !d.flash && !d.poll && !d.finale) {
+    lastOverlay = 'icon';
+    overlay(`<h2>🔍 Find your icon twin!</h2><div class="huge">${d.icon.found} / ${d.icon.total}</div><div class="label">found each other</div>`);
+  } else {
+    const html = showOverlay(d);
+    if (html !== lastOverlay) { lastOverlay = html; overlay(html); }
+    if (!html) overlay('');
+  }
+}
+fetch('/api/config').then(r => r.json()).then(c => { $('#title').textContent = c.party_name; document.title = c.party_name; });
+tick(); setInterval(tick, 1500);
+</script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Host controls</title>
+<style>
+  body { font-family:system-ui,-apple-system,sans-serif; background:#12101f; color:#f4f1ff; margin:0; padding:16px; max-width:900px; margin:0 auto; }
+  h1 { margin:0 0 4px; } h2 { margin:0 0 10px; font-size:18px; }
+  section { background:#1f1b36; border-radius:16px; padding:16px; margin:14px 0; }
+  button { font-size:15px; border:none; border-radius:10px; padding:10px 14px; font-weight:700; cursor:pointer; background:#ffcc33; color:#222; margin:3px; }
+  button.dim { background:#3a3562; color:#f4f1ff; } button.red { background:#ff6b81; color:#2a0710; }
+  input, select { font-size:15px; padding:8px; border-radius:8px; border:1px solid #3a3562; background:#14112a; color:#f4f1ff; margin:3px; }
+  .row { display:flex; flex-wrap:wrap; align-items:center; }
+  .photos { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; }
+  .ph { background:#14112a; border-radius:10px; padding:6px; font-size:12px; } .ph img { width:100%; border-radius:6px; }
+  .ph.hidden img { opacity:.25; }
+  table { width:100%; border-collapse:collapse; font-size:14px; } td { padding:4px 6px; border-bottom:1px solid #2c2750; vertical-align:top; }
+  .dim-t { color:#a9a3c9; } .msg { color:#3ddc97; min-height:20px; }
+</style>
+</head>
+<body>
+<h1>Host controls</h1>
+<div class="dim-t" id="status"></div><div class="msg" id="msg"></div>
+
+<section>
+  <h2>Ask everyone (poll)</h2>
+  <div class="row" id="presets"></div>
+  <div class="row">
+    <input id="q" placeholder="Custom question" style="flex:1;min-width:220px">
+    <select id="kind"><option value="text">Text</option><option value="number">Number</option><option value="choice">Choice</option></select>
+    <input id="opts" placeholder="Options, comma separated (choice only)">
+    <button id="launch">Launch</button>
+  </div>
+  <div class="row"><span id="pollstate" class="dim-t"></span><button class="dim" id="closepoll">Close poll</button><button class="dim" id="clearpoll">Clear from TV</button></div>
+</section>
+
+<section>
+  <h2>Moments</h2>
+  <div class="row">
+    <button id="icons">Icon match</button><button class="dim" id="iconsend">End icon match</button>
+    <span class="dim-t" id="iconstate"></span>
+  </div>
+  <div class="row">
+    <input id="fsec" type="number" value="60" style="width:80px"> sec
+    <input id="fbonus" type="number" value="3" style="width:60px"> pts
+    <button id="flash">Flash QR on TV</button>
+  </div>
+  <div class="row"><button id="finale">Finale screen: ON</button><button class="dim" id="finaleoff">Finale: OFF</button></div>
+</section>
+
+<section>
+  <h2>Photos (tap to hide or show on TV)</h2>
+  <div class="photos" id="photos"></div>
+</section>
+
+<section>
+  <h2>Players</h2><div id="players"></div>
+</section>
+
+<section>
+  <h2>Recent answers</h2><table id="answers"></table>
+</section>
+
+<section>
+  <h2>Setup</h2>
+  <div class="row"><a id="printlink" style="color:#ffcc33" target="_blank">Print the secret QR codes</a></div>
+  <div class="row"><button class="red" id="reset">Reset everything (new game)</button></div>
+</section>
+
+<script>
+const key = new URLSearchParams(location.search).get('key') || '';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const say = (t) => { $('#msg').textContent = t; setTimeout(() => { if ($('#msg').textContent === t) $('#msg').textContent = ''; }, 3000); };
+
+async function call(path, body) {
+  const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json','X-Host-Key':key}, body: JSON.stringify(body || {}) });
+  const j = await r.json().catch(() => ({}));
+  if (j.error) say('Error: ' + j.error); else say('Done');
+  load();
+  return j;
+}
+
+async function load() {
+  const r = await fetch('/api/host/data', { headers: { 'X-Host-Key': key } });
+  if (!r.ok) { $('#status').textContent = 'Wrong or missing key. Open this page with ?key=YOURKEY'; return; }
+  const d = await r.json();
+  $('#status').textContent = `${d.players.length} players · phase: ${d.phase} · ${d.minutes_to_midnight} min to midnight`;
+
+  if (!$('#presets').dataset.done) {
+    $('#presets').dataset.done = 1;
+    $('#presets').innerHTML = d.presets.map((p, i) => `<button class="dim" data-i="${i}">${esc(p.question)}</button>`).join('');
+    document.querySelectorAll('#presets button').forEach(b => b.onclick = () => call('/api/host/poll', d.presets[+b.dataset.i]));
+  }
+  $('#pollstate').textContent = d.poll ? `${d.poll.open ? 'OPEN' : 'closed'}: "${d.poll.question}" (${d.poll.count} answers)` : 'No poll running';
+  $('#iconstate').textContent = d.icon ? `${d.icon.found}/${d.icon.total} found` : '';
+
+  $('#photos').innerHTML = d.photos.map(p => `<div class="ph ${p.status}" data-id="${p.id}" data-s="${p.status}"><img src="${p.url}"><div><b>${esc(p.name)}</b> · ${p.status}</div></div>`).join('') || '<span class="dim-t">No photos yet</span>';
+  document.querySelectorAll('.ph').forEach(el => el.onclick = () => call('/api/host/photo', { id: el.dataset.id, status: el.dataset.s === 'visible' ? 'hidden' : 'visible' }));
+
+  $('#players').innerHTML = d.players.map(p => `<span style="display:inline-block;background:#14112a;border-radius:8px;padding:4px 10px;margin:3px">${esc(p.name)} <b>${p.points}</b></span>`).join('') || '<span class="dim-t">Nobody yet</span>';
+  $('#answers').innerHTML = d.answers.map(a => `<tr><td><b>${esc(a.name)}</b></td><td class="dim-t">${esc(a.prompt)}</td><td>${esc(a.answer)}</td></tr>`).join('');
+}
+
+$('#launch').onclick = () => call('/api/host/poll', { question: $('#q').value, kind: $('#kind').value, options: $('#opts').value.split(',') });
+$('#closepoll').onclick = () => call('/api/host/poll/close');
+$('#clearpoll').onclick = () => call('/api/host/poll/clear');
+$('#icons').onclick = () => call('/api/host/icons/start');
+$('#iconsend').onclick = () => call('/api/host/icons/clear');
+$('#flash').onclick = () => call('/api/host/flash', { seconds: +$('#fsec').value, bonus: +$('#fbonus').value });
+$('#finale').onclick = () => call('/api/host/finale', { on: true });
+$('#finaleoff').onclick = () => call('/api/host/finale', { on: false });
+$('#reset').onclick = () => { if (confirm('Wipe all players, scores and photos?')) call('/api/host/reset'); };
+$('#printlink').href = '/host/print?key=' + encodeURIComponent(key);
+
+load(); setInterval(load, 4000);
+</script>
+</body>
+</html>

@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Party Game</title>
+<style>
+  :root { --bg:#12101f; --card:#1f1b36; --ink:#f4f1ff; --dim:#a9a3c9; --accent:#ffcc33; --good:#3ddc97; --bad:#ff6b81; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; min-height:100vh; }
+  #app { max-width:520px; margin:0 auto; padding:16px; padding-bottom:60px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  header .who { font-weight:700; font-size:18px; }
+  header .pts { background:var(--accent); color:#222; font-weight:800; padding:6px 12px; border-radius:999px; }
+  .card { background:var(--card); border-radius:20px; padding:22px; box-shadow:0 8px 30px rgba(0,0,0,.35); }
+  .cat { text-transform:uppercase; letter-spacing:.12em; font-size:12px; color:var(--accent); font-weight:700; }
+  h1 { margin:6px 0 14px; font-size:30px; }
+  h2 { margin:8px 0 10px; font-size:24px; line-height:1.25; }
+  .hint { color:var(--dim); margin:0 0 14px; }
+  input[type=text], input[type=number] { width:100%; padding:14px; font-size:18px; border-radius:12px; border:2px solid #3a3562; background:#14112a; color:var(--ink); margin-bottom:10px; }
+  button { font-size:18px; border:none; border-radius:14px; padding:14px 18px; cursor:pointer; font-weight:700; }
+  button.big { width:100%; background:var(--good); color:#08261a; margin-bottom:10px; }
+  button.alt { width:100%; background:#3a3562; color:var(--ink); margin-bottom:10px; }
+  button.skip { background:transparent; color:var(--dim); font-size:15px; padding:10px; width:100%; margin-top:6px; }
+  button:disabled { opacity:.45; }
+  .msg { color:var(--bad); min-height:22px; margin-top:8px; }
+  .toast { position:fixed; left:50%; top:18px; transform:translateX(-50%); background:var(--good); color:#06281b; font-weight:800; padding:12px 18px; border-radius:14px; z-index:50; max-width:90%; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+  canvas#pad { width:100%; aspect-ratio:1/1; background:#fff; border-radius:14px; touch-action:none; margin-bottom:10px; }
+  video#cam { width:100%; border-radius:14px; background:#000; margin-bottom:10px; }
+  .big-num { font-size:56px; font-weight:900; text-align:center; margin:8px 0 14px; }
+  .modal { position:fixed; inset:0; background:rgba(10,8,25,.92); display:flex; align-items:center; justify-content:center; padding:20px; z-index:40; }
+  .modal .card { width:100%; max-width:480px; text-align:center; }
+  .emoji { font-size:120px; line-height:1.1; }
+  .opts button { width:100%; margin-bottom:10px; background:#3a3562; color:var(--ink); }
+  .small { color:var(--dim); font-size:14px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"></div>
+
+<script>
+/* ---------------------------------------------------------------
+   Phone page. Reads like a story:
+   1. If we don't know who you are -> ask for a name (join screen).
+   2. Otherwise ask the server "what's my card?" every 2 seconds.
+   3. Draw whatever card we got and send the answer back.
+   --------------------------------------------------------------- */
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let pid = localStorage.getItem('pid');
+let me = null;
+let cardKey = '', modalKey = '';
+let dismissedPoll = null;
+let clockOffset = 0;       // server time minus phone time
+let timers = [];            // intervals to clean up when the card changes
+let camStream = null;
+
+async function api(path, opts) {
+  try { const r = await fetch(path, opts); return await r.json(); }
+  catch (e) { return { error: 'Connection problem. Trying again...' }; }
+}
+const post = (path, body) => api(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+
+function toast(text) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = text;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+function setMsg(text) { const m = $('#msg'); if (m) m.textContent = text || ''; }
+
+/* ---------- join screen ---------- */
+async function showJoin() {
+  const cfg = await api('/api/config');
+  $('#app').innerHTML = `
+    <div class="card">
+      <div class="cat">Welcome</div>
+      <h1>${esc(cfg.party_name || 'Party Game')}</h1>
+      <p class="hint">Pick a name. You'll get a task right away.</p>
+      <input type="text" id="name" maxlength="20" placeholder="Your name" autocomplete="off">
+      <button class="big" id="join">Let's go</button>
+      <div class="msg" id="msg"></div>
+    </div>`;
+  $('#join').onclick = async () => {
+    const r = await post('/api/join', { name: $('#name').value });
+    if (r.error) return setMsg(r.error);
+    pid = r.pid; localStorage.setItem('pid', pid);
+    me = null; cardKey = ''; start();
+  };
+}
+
+/* ---------- refresh loop ---------- */
+async function refresh() {
+  if (!pid) return;
+  const r = await api('/api/me?pid=' + encodeURIComponent(pid));
+  if (r.error === 'unknown_player') { localStorage.removeItem('pid'); pid = null; return showJoin(); }
+  if (r.error) return;
+  me = r;
+  clockOffset = r.now - Date.now() / 1000;
+  drawShell();
+  drawModal();
+  drawCard();
+}
+
+function drawShell() {
+  if (!$('#shell')) {
+    $('#app').innerHTML = `<header id="shell"><div class="who"></div><div class="pts"></div></header><div id="card"></div>`;
+    cardKey = '';
+  }
+  $('#shell .who').textContent = me.name;
+  $('#shell .pts').textContent = me.points + ' pts';
+}
+
+function clearTimers() { timers.forEach(clearInterval); timers = []; stopCam(); }
+function stopCam() { if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; } }
+
+/* ---------- full-screen events: poll, icon match, finale ---------- */
+function drawModal() {
+  const el = $('#modal');
+  let key = 'none', html = '';
+  if (me.finale) {
+    key = 'finale';
+    html = `<div class="modal"><div class="card"><div class="emoji">🎆</div><h1>Happy New Year!</h1>
+      <p class="hint">You finished with</p><div class="big-num">${me.points}</div><p class="hint">points. Look at the big screen!</p></div></div>`;
+  } else if (me.icon && !me.icon.found) {
+    key = 'icon' + me.icon.id;
+    const n = me.icon.group - 1;
+    html = `<div class="modal"><div class="card"><div class="cat">Icon match</div>
+      <div class="emoji">${me.icon.emoji}</div>
+      <h2>Find ${n === 1 ? 'the 1 other person' : 'the ' + n + ' other people'} with this icon</h2>
+      <button class="big" id="found">We found each other!</button>
+      <p class="small">Show your screens to each other first.</p></div></div>`;
+  } else if (me.poll && !me.poll.answered && dismissedPoll !== me.poll.id) {
+    key = 'poll' + me.poll.id;
+    const p = me.poll;
+    let inner = '';
+    if (p.kind === 'choice') inner = `<div class="opts">${p.options.map((o, i) => `<button data-i="${i}">${esc(o)}</button>`).join('')}</div>`;
+    else inner = `<input type="${p.kind === 'number' ? 'number' : 'text'}" id="pans" ${p.kind === 'number' ? 'inputmode="decimal"' : ''} maxlength="40" placeholder="Your answer"><button class="big" id="psend">Send</button>`;
+    html = `<div class="modal"><div class="card"><div class="cat">Everyone answer!</div><h2>${esc(p.question)}</h2>${inner}
+      <div class="msg" id="pmsg"></div><button class="skip" id="pskip">Not now</button></div></div>`;
+  }
+  if (key === modalKey) return;
+  modalKey = key; el.innerHTML = html;
+  if (key.startsWith('icon')) $('#found').onclick = async () => { await post('/api/icon/found', { pid }); toast('+2 points!'); refresh(); };
+  if (key.startsWith('poll')) {
+    const p = me.poll;
+    const send = async (value) => {
+      const r = await post('/api/poll/answer', { pid, value });
+      if (r.error) { $('#pmsg').textContent = r.error; return; }
+      toast('Answer sent! +1'); refresh();
+    };
+    document.querySelectorAll('.opts button').forEach(b => b.onclick = () => send(p.options[+b.dataset.i]));
+    const s = $('#psend'); if (s) s.onclick = () => send($('#pans').value);
+    $('#pskip').onclick = () => { dismissedPoll = p.id; drawModal(); };
+  }
+}
+
+/* ---------- the card ---------- */
+function drawCard() {
+  const c = me.card;
+  const wrap = $('#card');
+  if (!c) { if (cardKey !== 'none') { clearTimers(); wrap.innerHTML = ''; cardKey = 'none'; } return; }
+  const key = c.id + '|' + (c.started_at || '') + '|' + c.prompt;
+  if (key === cardKey) return;
+  cardKey = key;
+  clearTimers();
+
+  wrap.innerHTML = `<div class="card">
+    <div class="cat">${esc(c.category)} · ${c.points} pt${c.points > 1 ? 's' : ''}</div>
+    <h2>${esc(c.prompt)}</h2>
+    ${c.hint ? `<p class="hint">${esc(c.hint)}</p>` : ''}
+    <div id="body"></div>
+    <div class="msg" id="msg"></div>
+    <button class="skip" id="skip">Skip this one</button>
+  </div>`;
+  $('#skip').onclick = () => respond('decline');
+  const body = $('#body');
+  ({ confirm: cardConfirm, text: cardText, number: cardText, photo: cardPhoto, draw: cardDraw,
+     secret_qr: cardSecret, timer: cardTimer, gforce: cardGforce, light: cardLight }[c.type] || cardConfirm)(c, body);
+}
+
+async function respond(action, answer) {
+  const r = await post('/api/card/respond', { pid, card_id: me.card.id, action, answer });
+  afterAnswer(r, action);
+}
+function afterAnswer(r, action) {
+  if (r.error) { setMsg(r.error); return; }
+  if (action === 'decline') toast('Skipped. Here is a new one!');
+  else toast(r.note ? r.note + (r.points_earned ? '  +' + r.points_earned : '') : '+' + r.points_earned + ' points!');
+  refresh();
+}
+
+/* confirm: just a Done button */
+function cardConfirm(c, body) {
+  body.innerHTML = `<button class="big" id="done">Done ✓</button>`;
+  $('#done').onclick = () => respond('done');
+}
+
+/* text or number answer */
+function cardText(c, body) {
+  const isNum = c.type === 'number';
+  body.innerHTML = `<input type="${isNum ? 'number' : 'text'}" ${isNum ? 'inputmode="decimal"' : ''} id="ans" maxlength="60" placeholder="${esc(c.placeholder || 'Your answer')}" autocomplete="off">
+    <button class="big" id="send">Submit</button>`;
+  $('#send').onclick = () => respond('done', $('#ans').value);
+}
+
+/* photo: open the camera (or photo library), shrink it, upload it */
+function cardPhoto(c, body) {
+  const cap = c.camera === 'library' ? '' : `capture="${c.camera === 'user' ? 'user' : 'environment'}"`;
+  body.innerHTML = `<input type="file" id="file" accept="image/*" ${cap} hidden>
+    <button class="big" id="pick">${c.camera === 'library' ? '🖼️ Choose a photo' : '📸 Take photo'}</button>`;
+  $('#pick').onclick = () => $('#file').click();
+  $('#file').onchange = (e) => { if (e.target.files[0]) uploadBlob(e.target.files[0]); };
+}
+
+async function shrink(fileOrBlob, max = 1000) {
+  try {
+    const bmp = await createImageBitmap(fileOrBlob, { imageOrientation: 'from-image' });
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(bmp.width * scale); cv.height = Math.round(bmp.height * scale);
+    cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+    return await new Promise(res => cv.toBlob(b => res(b || fileOrBlob), 'image/jpeg', 0.85));
+  } catch (e) { return fileOrBlob; }     // server will shrink it anyway
+}
+
+async function uploadBlob(blob, answer) {
+  setMsg('');
+  const btns = document.querySelectorAll('#body button, #skip'); btns.forEach(b => b.disabled = true);
+  $('#msg').style.color = 'var(--dim)'; $('#msg').textContent = 'Sending...';
+  const small = await shrink(blob);
+  const fd = new FormData();
+  fd.append('pid', pid); fd.append('card_id', me.card.id);
+  if (answer != null) fd.append('answer', answer);
+  fd.append('file', small, 'photo.jpg');
+  let r;
+  try { r = await (await fetch('/api/card/photo', { method:'POST', body: fd })).json(); }
+  catch (e) { r = { error: 'Upload failed. Try again.' }; }
+  btns.forEach(b => b.disabled = false);
+  $('#msg').style.color = '';
+  afterAnswer(r, 'done');
+}
+
+/* draw: finger drawing on a canvas */
+function cardDraw(c, body) {
+  body.innerHTML = `<canvas id="pad" width="600" height="600"></canvas>
+    <button class="big" id="up">Upload drawing</button><button class="alt" id="clr">Clear</button>`;
+  const cv = $('#pad'), ctx = cv.getContext('2d');
+  const blank = () => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 600, 600); ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.strokeStyle = '#222'; };
+  blank();
+  let drawing = false;
+  const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * 600 / r.width, (e.clientY - r.top) * 600 / r.height]; };
+  cv.addEventListener('pointerdown', e => { drawing = true; const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + .1, y + .1); ctx.stroke(); cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => { if (!drawing) return; const [x, y] = pos(e); ctx.lineTo(x, y); ctx.stroke(); });
+  const stop = () => { drawing = false; };
+  cv.addEventListener('pointerup', stop); cv.addEventListener('pointercancel', stop);
+  $('#clr').onclick = blank;
+  $('#up').onclick = () => cv.toBlob(b => uploadBlob(b), 'image/jpeg', 0.9);
+}
+
+/* secret QR: the real scan happens in the phone's camera app (opens /s/<code>).
+   This page just waits, and also lets people type the code under the QR. */
+function cardSecret(c, body) {
+  body.innerHTML = `<p class="hint">Scan it with your phone's regular camera app. This screen will update when you've found it.</p>
+    <input type="text" id="code" placeholder="Can't scan? Type the code under the QR" autocomplete="off" autocapitalize="off">
+    <button class="alt" id="go">Use code</button>`;
+  $('#go').onclick = async () => {
+    const r = await post('/api/secret', { pid, code: $('#code').value });
+    if (r.error) return setMsg(r.error);
+    afterAnswer(r, 'done');
+  };
+}
+
+/* timer: server remembers when you pressed Start, so reloads are safe */
+function cardTimer(c, body) {
+  if (!c.started_at) {
+    body.innerHTML = `<button class="big" id="go">Start the ${c.minutes}-minute timer</button>`;
+    $('#go').onclick = async () => { await post('/api/card/start', { pid, card_id: c.id }); refresh(); };
+    return;
+  }
+  body.innerHTML = `<div class="big-num" id="left"></div><button class="big" id="done" disabled>Done ✓</button>`;
+  $('#done').onclick = () => respond('done');
+  const tick = () => {
+    const left = Math.max(0, Math.ceil(c.ready_at - (Date.now() / 1000 + clockOffset)));
+    $('#left').textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+    $('#done').disabled = left > 0;
+  };
+  tick(); timers.push(setInterval(tick, 500));
+}
+
+/* G force: listen to the accelerometer for 10 seconds, keep the biggest reading.
+   Note: phones only allow this on https:// pages (see README). */
+function cardGforce(c, body) {
+  body.innerHTML = `<div class="big-num" id="gval">0.00 g</div><button class="big" id="go">Start (10 seconds)</button>`;
+  $('#go').onclick = async () => {
+    if (typeof DeviceMotionEvent === 'undefined') return setMsg('No motion sensor here. You can skip this one.');
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+      const p = await DeviceMotionEvent.requestPermission().catch(() => 'denied');
+      if (p !== 'granted') return setMsg('Motion access was not allowed.');
+    }
+    let max = 0, got = false;
+    const onMotion = (e) => {
+      const a = e.accelerationIncludingGravity;
+      if (!a || a.x == null) return;
+      got = true;
+      const g = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z) / 9.81;
+      if (g > max) max = g;
+      $('#gval').textContent = max.toFixed(2) + ' g';
+    };
+    window.addEventListener('devicemotion', onMotion);
+    $('#go').disabled = true; let left = 10;
+    const iv = setInterval(() => {
+      left--; $('#go').textContent = 'Go! ' + left + 's';
+      if (left <= 0) {
+        clearInterval(iv); window.removeEventListener('devicemotion', onMotion);
+        if (!got) { $('#go').disabled = false; $('#go').textContent = 'Start (10 seconds)'; return setMsg('No sensor data. This needs the https:// link.'); }
+        respond('done', max.toFixed(2));
+      }
+    }, 1000);
+    timers.push(iv);
+  };
+}
+
+/* brightest light: live camera view with a brightness meter, then snap a photo */
+async function cardLight(c, body) {
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    body.innerHTML = `<p class="hint">Live camera needs the https:// link. You can still take a photo of the brightest light.</p>`;
+    return cardPhoto(c, body.appendChild(document.createElement('div')));
+  }
+  body.innerHTML = `<video id="cam" autoplay playsinline muted></video>
+    <div class="big-num" id="lum">--</div><button class="big" id="snap">Snap the brightest spot</button>`;
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch (e) { body.innerHTML = `<p class="hint">Camera was blocked. You can skip this one.</p>`; return; }
+  const v = $('#cam'); v.srcObject = camStream;
+  const probe = document.createElement('canvas'); probe.width = 32; probe.height = 24;
+  const pctx = probe.getContext('2d', { willReadFrequently: true });
+  let level = 0;
+  timers.push(setInterval(() => {
+    if (!v.videoWidth) return;
+    pctx.drawImage(v, 0, 0, 32, 24);
+    const d = pctx.getImageData(0, 0, 32, 24).data;
+    let best = 0;
+    for (let i = 0; i < d.length; i += 4) { const l = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]; if (l > best) best = l; }
+    level = Math.round(best / 255 * 100);
+    $('#lum').textContent = level + '% bright';
+  }, 250));
+  $('#snap').onclick = () => {
+    const cv = document.createElement('canvas');
+    cv.width = v.videoWidth; cv.height = v.videoHeight;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    cv.toBlob(b => uploadBlob(b, level + '% bright'), 'image/jpeg', 0.85);
+  };
+}
+
+/* ---------- start ---------- */
+function start() { refresh(); }
+if (pid) start(); else showJoin();
+setInterval(refresh, 2000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+</script>
+</body>
+</html>

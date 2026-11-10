@@ -1,0 +1,129 @@
+{
+  "settings": {
+    "party_name": "New Year's Eve 2026",
+    "albert_handle": "@albert-venmo (edit me in cards.json)",
+    "approve_photos": false,
+    "tv_photo_limit": 14
+  },
+
+  "draw_things": [
+    "a cat wearing a party hat",
+    "your hometown",
+    "a rocket ship",
+    "a dinosaur eating pizza",
+    "a robot dancing",
+    "your dream house",
+    "a sloth on a skateboard",
+    "your New Year's resolution",
+    "a giant sandwich",
+    "the person next to you"
+  ],
+
+  "poll_presets": [
+    { "question": "How many people are at the party?", "kind": "number" },
+    { "question": "What are you drinking?", "kind": "text" },
+    { "question": "Is a hot dog a sandwich?", "kind": "choice", "options": ["Yes", "No", "Chaos"] },
+    { "question": "How long will your 2027 resolution last?", "kind": "choice", "options": ["All year", "A month", "Until tomorrow", "Already broken"] },
+    { "question": "Best snack so far?", "kind": "text" }
+  ],
+
+  "cards": [
+    { "id": "selfie", "category": "Photos", "type": "photo", "camera": "user", "points": 2,
+      "prompt": "Take a selfie with someone and upload it",
+      "hint": "Whoever is standing closest to you!" },
+
+    { "id": "crusty", "category": "Photos", "type": "photo", "camera": "environment", "points": 2,
+      "prompt": "Find and take a picture of Crusty the dog" },
+
+    { "id": "intro", "category": "Social", "type": "text", "points": 1,
+      "prompt": "Introduce yourself to someone new. What's their name?",
+      "placeholder": "Their name" },
+
+    { "id": "bobby_house", "category": "Photos", "type": "photo", "camera": "environment", "points": 2,
+      "prompt": "Mess with Bobby's house, then take a photo of what you did",
+      "hint": "Keep it harmless and easy to undo." },
+
+    { "id": "bobby_kaitlin", "category": "Photos", "type": "photo", "camera": "environment", "points": 2,
+      "prompt": "Take a photo of Bobby or Kaitlin" },
+
+    { "id": "house_outside", "category": "Photos", "type": "photo", "camera": "environment", "points": 2,
+      "prompt": "Take a photo of the outside of the house" },
+
+    { "id": "camera_roll", "category": "Photos", "type": "photo", "camera": "library", "points": 1,
+      "prompt": "Share a random family-friendly photo from your camera roll" },
+
+    { "id": "fav_color", "category": "Social", "type": "text", "points": 1,
+      "prompt": "Ask someone what their favorite color is",
+      "placeholder": "Their favorite color" },
+
+    { "id": "get_drink", "category": "Drinks", "type": "confirm", "points": 1,
+      "prompt": "Get a drink. If you already have one, get someone else a drink.",
+      "weights": { "early": 2, "mid": 1, "late": 1 } },
+
+    { "id": "cheers", "category": "Drinks", "type": "confirm", "points": 1,
+      "prompt": "Find someone drinking a stronger drink than you and cheers them." },
+
+    { "id": "qr_fridge", "category": "Scavenger", "type": "secret_qr", "points": 2, "code": "plum42",
+      "location": "the fridge",
+      "prompt": "Find the secret QR code on the fridge and scan it" },
+
+    { "id": "qr_ceiling", "category": "Scavenger", "type": "secret_qr", "points": 2, "code": "kiwi17",
+      "location": "the ceiling",
+      "prompt": "Find the secret QR code on the ceiling and scan it" },
+
+    { "id": "qr_coffee_table", "category": "Scavenger", "type": "secret_qr", "points": 2, "code": "mango88",
+      "location": "under the coffee table",
+      "prompt": "Find the secret QR code under the coffee table and scan it" },
+
+    { "id": "qr_bathroom", "category": "Scavenger", "type": "secret_qr", "points": 2, "code": "fig53",
+      "location": "the bathroom",
+      "prompt": "Find the secret QR code in the bathroom and scan it" },
+
+    { "id": "lego", "category": "Build", "type": "photo", "camera": "environment", "points": 3,
+      "prompt": "Build a lego model and upload a photo of it" },
+
+    { "id": "draw", "category": "Build", "type": "draw", "points": 2,
+      "prompt": "Draw {thing} and upload it",
+      "hint": "Use your finger. Masterpieces only." },
+
+    { "id": "no_phone", "category": "Challenge", "type": "timer", "minutes": 15, "points": 3,
+      "prompt": "Put your phone in the no-phone box for 15 minutes",
+      "hint": "Press Start, put the phone in the box, come back later and press Done.",
+      "weights": { "early": 1, "mid": 0.5, "late": 0 } },
+
+    { "id": "venmo_albert", "category": "Challenge", "type": "confirm", "points": 1,
+      "prompt": "Send Albert $1 ({albert_handle}). Press Done once it's sent." },
+
+    { "id": "brightest_light", "category": "Sensors", "type": "light", "camera": "environment", "points": 2,
+      "prompt": "Find the brightest light in the house with your camera",
+      "hint": "Point the camera around, then tap Snap on the brightest spot you find." },
+
+    { "id": "gforce", "category": "Sensors", "type": "gforce", "points": 2,
+      "prompt": "Record the highest G force on your phone",
+      "hint": "Tap Start, then you have 10 seconds. Shake, swing, spin. Keep a firm grip!" },
+
+    { "id": "t_name", "category": "Trivia", "type": "text", "points": 1,
+      "prompt": "What's your name?",
+      "placeholder": "Yes, again",
+      "weights": { "early": 1, "mid": 0.3, "late": 0 } },
+
+    { "id": "t_midnight", "category": "Trivia", "type": "number", "points": 1, "grade": "minutes_to_midnight",
+      "prompt": "Without looking at a clock, how many minutes until midnight?",
+      "placeholder": "Minutes",
+      "weights": { "early": 0.2, "mid": 1.5, "late": 3 } },
+
+    { "id": "t_scoreboard", "category": "Trivia", "type": "number", "points": 1, "grade": "scoreboard_number",
+      "prompt": "What number is on the scoreboard? (Tasks completed)",
+      "hint": "Look at the big screen.",
+      "placeholder": "Number" },
+
+    { "id": "t_watchers", "category": "Trivia", "type": "number", "points": 1,
+      "prompt": "How many people are watching the scoreboard right now?",
+      "placeholder": "Number" },
+
+    { "id": "t_last", "category": "Trivia", "type": "text", "points": 1,
+      "prompt": "Who was the last person to arrive at the party?",
+      "placeholder": "Name",
+      "weights": { "early": 1, "mid": 1, "late": 0.3 } }
+  ]
+}

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Print the secret QR codes</title>
+<style>
+  body { font-family:system-ui,-apple-system,sans-serif; margin:20px; }
+  .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:24px; }
+  .tag { border:2px dashed #999; padding:16px; text-align:center; break-inside:avoid; }
+  .tag img { width:260px; }
+  .code { font-family:ui-monospace,Menlo,monospace; font-size:26px; font-weight:700; }
+  .where { font-size:13px; color:#666; }
+  @media print { .noprint { display:none; } }
+</style>
+</head>
+<body>
+<p class="noprint">Print this page, cut out each tag, and stick it in the right place. The "where" line is only for you, so cut it off before hanging it up.</p>
+<div class="grid" id="grid"></div>
+<script>
+const key = new URLSearchParams(location.search).get('key');
+fetch('/api/host/data?key=' + encodeURIComponent(key)).then(r => r.json()).then(d => {
+  document.getElementById('grid').innerHTML = d.secrets.map(s => `
+    <div class="tag">
+      <img src="/qr/secret/${encodeURIComponent(s.code)}.png" alt="">
+      <div class="code">${s.code}</div>
+      <div class="where">Hang: ${s.location}</div>
+    </div>`).join('');
+});
+</script>
+</body>
+</html>
