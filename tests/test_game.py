@@ -523,3 +523,56 @@ def test_closed_poll_leaves_the_tv_after_a_while(client, host):
     game.state["poll"]["closed_at"] -= game.POLL_RESULTS_SECONDS + 1
     assert client.get("/api/tv").get_json()["poll"] is None
     assert client.get("/api/host/data", headers=host).get_json()["poll"]  # the host still sees it
+
+
+def launch_poll(client, host, question):
+    client.post("/api/host/poll", json={"question": question, "kind": "text"}, headers=host)
+    return game.state["poll"]["id"]
+
+
+def test_old_polls_go_into_the_log_with_their_answers(client, make_player, host):
+    ann = make_player()
+    launch_poll(client, host, "Best snack?")
+    ann.poll_answer("nachos")
+    launch_poll(client, host, "Favorite song?")  # replaces the first one
+    log = client.get("/api/host/data", headers=host).get_json()["poll_log"]
+    assert [p["question"] for p in log] == ["Favorite song?", "Best snack?"]  # newest first
+    assert log[0]["on_tv"] and not log[1]["on_tv"]
+    assert log[1]["words"] == [["nachos", 1]] and not log[1]["open"]
+
+
+def test_host_can_show_a_hidden_poll_again(client, make_player, host):
+    first = launch_poll(client, host, "Best snack?")
+    client.post("/api/host/poll/clear", headers=host)
+    assert client.get("/api/tv").get_json()["poll"] is None
+    assert client.post("/api/host/poll/show", json={"id": first}, headers=host).status_code == 200
+    tv_poll = client.get("/api/tv").get_json()["poll"]
+    assert tv_poll["question"] == "Best snack?" and not tv_poll["open"]  # results only, no new answers
+    # It stays up (no 20-second timeout) until the host hides it again.
+    game.state["poll"]["closed_at"] -= game.POLL_RESULTS_SECONDS + 60
+    assert client.get("/api/tv").get_json()["poll"] is not None
+    assert make_player().poll_answer("cake").status_code == 400
+    client.post("/api/host/poll/clear", headers=host)
+    assert client.get("/api/tv").get_json()["poll"] is None
+    assert len(client.get("/api/host/data", headers=host).get_json()["poll_log"]) == 1  # not duplicated
+
+
+def test_showing_an_old_poll_swaps_out_the_current_one(client, host):
+    first = launch_poll(client, host, "Best snack?")
+    launch_poll(client, host, "Favorite song?")
+    client.post("/api/host/poll/show", json={"id": first}, headers=host)
+    log = client.get("/api/host/data", headers=host).get_json()["poll_log"]
+    assert [(p["question"], p["on_tv"]) for p in log] == [("Best snack?", True), ("Favorite song?", False)]
+
+
+def test_a_poll_that_timed_out_can_be_shown_again(client, host):
+    first = launch_poll(client, host, "Best snack?")
+    client.post("/api/host/poll/close", headers=host)
+    game.state["poll"]["closed_at"] -= game.POLL_RESULTS_SECONDS + 1
+    assert client.get("/api/tv").get_json()["poll"] is None
+    client.post("/api/host/poll/show", json={"id": first}, headers=host)
+    assert client.get("/api/tv").get_json()["poll"]["question"] == "Best snack?"
+
+
+def test_showing_an_unknown_poll_is_an_error(client, host):
+    assert client.post("/api/host/poll/show", json={"id": "nope"}, headers=host).status_code == 404

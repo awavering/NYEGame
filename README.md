@@ -67,6 +67,8 @@ once), and `skip_wait_seconds` (see Scoring).
 - **End the game early**: the same finale screen, but "Thanks for playing!" instead of
   Happy New Year. For parties that wrap up before midnight.
 - **Polls** close when you press Close poll; the final results stay on the TV for 20 seconds.
+- **Poll log**: every poll from tonight with its top answer. **Show on TV** brings a poll's
+  final results back (no new answers) and keeps them up until you press Clear from TV.
 - **Photos**: tap one to hide or show it on the TV.
 - **Print the secret QR codes**: prints the QR tags for the scavenger-hunt cards.
 - **Reset**: wipes players, scores, and photos. Use it after rehearsal!

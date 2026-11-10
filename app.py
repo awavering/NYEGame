@@ -65,6 +65,8 @@ TZ = ZoneInfo(os.environ.get("TZ_NAME", "America/Denver"))
 MIDNIGHT_ISO = os.environ.get("MIDNIGHT_ISO")
 # How long a closed poll's results stay on the TV before it goes back to normal.
 POLL_RESULTS_SECONDS = 20
+# How many old polls the host page remembers.
+POLL_LOG_SIZE = 50
 
 ICONS = [
     "🦄",
@@ -151,7 +153,8 @@ def fresh_state():
         "history": [],  # every completed / declined / bonus event
         "assigned": {},  # card_id -> times handed out
         "photos": [],  # uploaded pictures
-        "poll": None,
+        "poll": None,  # the current poll (the one the TV can show)
+        "poll_log": [],  # earlier polls, oldest first, so the host can show them again
         "icon_sync": None,
         "flash": None,
         "finale": False,  # False, "midnight" (Happy New Year) or "thanks" (host ended early)
@@ -787,6 +790,32 @@ def poll_summary(poll):
     return out
 
 
+def poll_on_tv():
+    """Is the current poll on the TV right now? Call while holding lock.
+
+    An open poll always is. A closed poll shows its final results for
+    POLL_RESULTS_SECONDS, then leaves the TV by itself, unless the host
+    brought it back from the poll log ("pinned"), which stays until hidden."""
+    poll = state["poll"]
+    if not poll:
+        return False
+    if poll["open"] or poll.get("pinned"):
+        return True
+    return time.time() - poll.get("closed_at", 0) <= POLL_RESULTS_SECONDS
+
+
+def retire_poll():
+    """Move the current poll into the log (it is being replaced or hidden)."""
+    poll = state["poll"]
+    if poll:
+        poll["open"] = False
+        poll.setdefault("closed_at", time.time())
+        poll.pop("pinned", None)
+        state["poll_log"].append(poll)
+        del state["poll_log"][:-POLL_LOG_SIZE]  # keep only the most recent ones
+    state["poll"] = None
+
+
 def category_stats():
     cats = {}
     for h in state["history"]:
@@ -839,12 +868,7 @@ def api_tv():
                 if not best_g or g > best_g["g"]:
                     best_g = {"name": h["name"], "g": g}
 
-        # A closed poll shows its final results for a while, then leaves the
-        # TV by itself (the host can still clear it sooner).
-        poll = state["poll"]
-        if poll and not poll["open"] and time.time() - poll.get("closed_at", 0) > POLL_RESULTS_SECONDS:
-            poll = None
-        poll = poll_summary(poll) if poll else None
+        poll = poll_summary(state["poll"]) if poll_on_tv() else None
 
         icon = None
         sync = state["icon_sync"]
@@ -927,6 +951,11 @@ def host_data():
                     if h["result"] == "done" and h["answer"] is not None
                 ][:60],
                 "poll": poll_summary(state["poll"]) if state["poll"] else None,
+                # Every poll tonight, newest first, the current one included.
+                "poll_log": [
+                    {**poll_summary(p), "on_tv": p is state["poll"] and poll_on_tv()}
+                    for p in ([state["poll"]] if state["poll"] else []) + state["poll_log"][::-1]
+                ],
                 "icon": (
                     {"found": len(state["icon_sync"]["found"]), "total": len(state["icon_sync"]["assign"])}
                     if state["icon_sync"]
@@ -958,6 +987,7 @@ def host_poll():
     if kind == "choice" and len(options) < 2:
         return jsonify({"error": "Choice polls need at least two options."}), 400
     with lock:
+        retire_poll()  # the previous poll (and its answers) goes into the log
         state["poll"] = {
             "id": uuid.uuid4().hex[:6],
             "question": question,
@@ -965,6 +995,7 @@ def host_poll():
             "options": options,
             "answers": {},
             "open": True,
+            "t": time.time(),
         }
         save()
     return jsonify({"ok": True})
@@ -972,15 +1003,30 @@ def host_poll():
 
 @app.post("/api/host/poll/<action>")
 def host_poll_action(action):
+    """close: stop taking answers. clear: take it off the TV (into the log).
+    show: put a poll's final results back on the TV, by id, until cleared."""
     check_host()
-    if action not in ("close", "clear"):
+    if action not in ("close", "clear", "show"):
         return jsonify({"error": "Unknown action."}), 400
     with lock:
         if action == "close" and state["poll"]:
             state["poll"]["open"] = False
             state["poll"]["closed_at"] = time.time()
         elif action == "clear":
-            state["poll"] = None
+            retire_poll()
+        elif action == "show":
+            poll_id = (request.get_json(silent=True) or {}).get("id")
+            current = state["poll"]
+            if not (current and current["id"] == poll_id):
+                old = next((p for p in state["poll_log"] if p["id"] == poll_id), None)
+                if not old:
+                    return jsonify({"error": "That poll isn't in the log."}), 404
+                retire_poll()
+                state["poll_log"].remove(old)
+                state["poll"] = current = old
+            # A re-shown poll is closed (no new answers) and stays on the TV.
+            if not current["open"]:
+                current["pinned"] = True
         save()
     return jsonify({"ok": True})
 
