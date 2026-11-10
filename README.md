@@ -36,6 +36,10 @@ running; new cards are picked up automatically. Each card has an `id`, `category
 | `gforce` | 10-second accelerometer test |
 | `light` | live camera with a brightness meter, then snap a photo |
 
+After editing, run `python tools/check_cards.py` to catch mistakes (duplicate ids, a missing
+secret code, a typo in a card type). The server runs the same check on every save and, if
+there is a mistake, keeps using your last good version and prints what is wrong in the terminal.
+
 **Time of night:** add `"weights": {"early": 1, "mid": 1, "late": 1}` to a card to make it
 more or less likely. "Early" is more than 2 hours before midnight, "mid" is 2 hours to
 45 minutes before, "late" is the last 45 minutes. A weight of 0 means never.
@@ -69,9 +73,20 @@ light becomes a normal photo, and G force can be skipped. To get https, deploy i
 or ngrok pointing at your laptop. With a tunnel, start the server with
 `BASE_URL=https://your-tunnel-address python app.py` so the QR code uses it.
 
+## Working on the code
+
+See [DEVELOPMENT.md](DEVELOPMENT.md). The short version:
+
+    make setup    # one time
+    make check    # lint, card check, tests
+    make dev      # rehearse with a fake clock (your real game data is untouched)
+    make sim      # fake guests, so the TV has something to show
+
 ## Files
 
-- `app.py`: the server (all game rules)
+- `app.py`: the server (all game rules). Start reading at the map at the top
+- `tools/`: `check_cards.py` (validates cards.json), `simulate_guests.py` (fake guests)
+- `tests/`: the automated tests; `Makefile`: shortcuts; `.github/workflows/ci.yml`: runs the checks on GitHub
 - `cards.json`: your tasks and settings
 - `pages/play.html`: phone page; `pages/tv.html`: TV page; `pages/host.html`: host page
 - `state.json` and `uploads/`: created while running; delete both for a clean start

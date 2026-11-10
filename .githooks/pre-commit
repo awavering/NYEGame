@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs before every commit: lint, check cards.json, run the tests.
+# Turn on with `make hooks`. Skip once with `git commit --no-verify`.
+exec make check
