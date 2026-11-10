@@ -23,7 +23,8 @@ deploy it online (see below).
 
 Everything guests see comes from `cards.json`. You can edit it while the game is
 running; new cards are picked up automatically. Each card has an `id`, `category`,
-`type`, `prompt` and optional `hint` and `points`.
+`type`, `prompt` and optional `hint` and `points`. Add `"image": "dog.png"` to show a
+picture from `pages/assets/` above the prompt.
 
 | type | what the phone shows |
 |---|---|
@@ -46,7 +47,8 @@ more or less likely. "Early" is more than 2 hours before midnight, "mid" is 2 ho
 
 **Settings** at the top of `cards.json`: party name, the `albert_handle` shown in the
 "Send Albert $1" card, `approve_photos` (true = photos stay off the TV until you
-approve them in the host page), and how many photos bounce on the TV at once.
+approve them in the host page), how many photos bounce on the TV at once, and `mascot` (a file in `pages/assets/`,
+such as `"dog.png"`, that sits on the TV and reacts when guests finish or skip a card).
 
 ## Host page
 
@@ -85,7 +87,8 @@ See [DEVELOPMENT.md](DEVELOPMENT.md). The short version:
 ## Files
 
 - `app.py`: the server (all game rules). Start reading at the map at the top
-- `tools/`: `check_cards.py` (validates cards.json), `simulate_guests.py` (fake guests)
+- `tools/`: `check_cards.py` (validates cards.json), `simulate_guests.py` (fake guests), `make_sprite.py` (pixel art to sprite)
+- `pages/assets/`: pictures used by cards and the TV mascot
 - `tests/`: the automated tests; `Makefile`: shortcuts; `.github/workflows/ci.yml`: runs the checks on GitHub
 - `cards.json`: your tasks and settings
 - `pages/play.html`: phone page; `pages/tv.html`: TV page; `pages/host.html`: host page

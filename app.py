@@ -47,6 +47,7 @@ from tools.check_cards import validate as validate_cards
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 PAGES = os.path.join(BASE, "pages")
+ASSETS = os.path.join(PAGES, "assets")  # pictures (sprites) the pages can show
 # Everything the game writes while running (state.json, uploads/) goes in
 # DATA_DIR. Override with GAME_DATA_DIR; the tests point it at a temp folder
 # so they can never touch a real game.
@@ -109,7 +110,7 @@ def load_cards():
         try:
             with open(CARDS_FILE, encoding="utf-8") as f:
                 data = json.load(f)
-            errors, warnings = validate_cards(data)
+            errors, warnings = validate_cards(data, assets_dir=ASSETS)
         except (OSError, ValueError) as exc:  # includes JSON syntax errors
             data, errors, warnings = None, [f"could not read cards.json: {exc}"], []
         if errors:
@@ -269,6 +270,8 @@ def public_card(p):
         out["ready_at"] = cur["started_at"] + card["minutes"] * 60
     if card["type"] == "secret_qr":
         out["location"] = card.get("location", "")
+    if card.get("image"):
+        out["image"] = "/assets/" + card["image"]
     return out
 
 
@@ -381,9 +384,20 @@ def photo_file(name):
     return send_from_directory(UPLOADS, name)
 
 
+@app.get("/assets/<path:name>")
+def asset_file(name):
+    return send_from_directory(ASSETS, name)  # refuses paths that climb out of the folder
+
+
 @app.get("/api/config")
 def api_config():
-    return jsonify({"party_name": settings().get("party_name", "Party Game")})
+    mascot = settings().get("mascot")
+    return jsonify(
+        {
+            "party_name": settings().get("party_name", "Party Game"),
+            "mascot": f"/assets/{mascot}" if mascot else None,
+        }
+    )
 
 
 def check_host():

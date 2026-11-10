@@ -27,6 +27,7 @@
   .toast { position:fixed; left:50%; top:18px; transform:translateX(-50%); background:var(--good); color:#06281b; font-weight:800; padding:12px 18px; border-radius:14px; z-index:50; max-width:90%; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.4); }
   canvas#pad { width:100%; aspect-ratio:1/1; background:#fff; border-radius:14px; touch-action:none; margin-bottom:10px; }
   video#cam { width:100%; border-radius:14px; background:#000; margin-bottom:10px; }
+  .sprite { display:block; margin:10px auto 14px; image-rendering:pixelated; }
   .big-num { font-size:56px; font-weight:900; text-align:center; margin:8px 0 14px; }
   .modal { position:fixed; inset:0; background:rgba(10,8,25,.92); display:flex; align-items:center; justify-content:center; padding:20px; z-index:40; }
   .modal .card { width:100%; max-width:480px; text-align:center; }
@@ -169,12 +170,16 @@ function drawCard() {
 
   wrap.innerHTML = `<div class="card">
     <div class="cat">${esc(c.category)} · ${c.points} pt${c.points > 1 ? 's' : ''}</div>
+    ${c.image ? `<img class="sprite" src="${esc(c.image)}" alt="">` : ''}
     <h2>${esc(c.prompt)}</h2>
     ${c.hint ? `<p class="hint">${esc(c.hint)}</p>` : ''}
     <div id="body"></div>
     <div class="msg" id="msg"></div>
     <button class="skip" id="skip">Skip this one</button>
   </div>`;
+  // Pixel-art pictures are drawn at a whole-number multiple of their real size so they stay sharp.
+  const sprite = wrap.querySelector('.sprite');
+  if (sprite) sprite.onload = () => { sprite.style.width = sprite.naturalWidth * Math.max(1, Math.floor(180 / sprite.naturalHeight)) + 'px'; };
   $('#skip').onclick = () => respond('decline');
   const body = $('#body');
   ({ confirm: cardConfirm, text: cardText, number: cardText, photo: cardPhoto, draw: cardDraw,

@@ -40,11 +40,23 @@ CODE_RE = re.compile(r"^[A-Za-z0-9_-]+$")  # codes live in a URL path: /s/<code>
 LONG_PROMPT = 140  # characters; longer prompts get cramped on a phone
 
 
+IMAGE_RE = re.compile(r"^[A-Za-z0-9_-]+\.(png|gif|webp|jpg|jpeg)$")  # a plain file name, no folders
+
+
+def _check_image(where, name, assets_dir, errors):
+    if not isinstance(name, str) or not IMAGE_RE.match(name):
+        errors.append(
+            f'{where}: image must be a file name like "dog.png" (letters, digits, - and _) kept in pages/assets/.'
+        )
+    elif assets_dir is not None and not (Path(assets_dir) / name).is_file():
+        errors.append(f'{where}: image "{name}" was not found in pages/assets/.')
+
+
 def _is_number(value):
     return isinstance(value, int | float) and not isinstance(value, bool)
 
 
-def _check_card(i, card, draw_things, settings, errors, warnings):
+def _check_card(i, card, draw_things, settings, assets_dir, errors, warnings):
     cid = card.get("id") if isinstance(card, dict) else None
     where = f'card #{i + 1} ("{cid}")' if cid else f"card #{i + 1}"
     if not isinstance(card, dict):
@@ -56,6 +68,9 @@ def _check_card(i, card, draw_things, settings, errors, warnings):
             errors.append(f'{where}: "{field}" is required (non-empty text).')
     if "hint" in card and not isinstance(card["hint"], str):
         errors.append(f'{where}: "hint" must be text.')
+
+    if "image" in card:
+        _check_image(where, card["image"], assets_dir, errors)
 
     ctype = card.get("type")
     if ctype not in CARD_TYPES:
@@ -99,7 +114,7 @@ def _check_card(i, card, draw_things, settings, errors, warnings):
     return cid
 
 
-def validate(data):
+def validate(data, assets_dir=None):
     """Return (errors, warnings), two lists of readable strings."""
     errors, warnings = [], []
     if not isinstance(data, dict):
@@ -109,6 +124,8 @@ def validate(data):
     if not isinstance(settings, dict):
         errors.append('"settings" must be an object.')
         settings = {}
+    if settings.get("mascot") is not None:
+        _check_image("settings.mascot", settings["mascot"], assets_dir, errors)
     draw_things = data.get("draw_things", [])
     if not isinstance(draw_things, list) or not all(isinstance(t, str) for t in draw_things):
         errors.append('"draw_things" must be a list of text.')
@@ -121,7 +138,7 @@ def validate(data):
 
     seen_ids, seen_codes = {}, {}
     for i, card in enumerate(cards):
-        cid = _check_card(i, card, draw_things, settings, errors, warnings)
+        cid = _check_card(i, card, draw_things, settings, assets_dir, errors, warnings)
         if cid is None:
             continue
         if cid in seen_ids:
@@ -163,7 +180,7 @@ def main(argv):
     except (OSError, ValueError) as exc:
         print(f"ERROR: could not read {path}: {exc}")
         return 1
-    errors, warnings = validate(data)
+    errors, warnings = validate(data, assets_dir=path.resolve().parent / "pages" / "assets")
     for w in warnings:
         print(f"warning: {w}")
     for e in errors:
