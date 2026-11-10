@@ -44,9 +44,16 @@ there is a mistake, keeps using your last good version and prints what is wrong 
 more or less likely. "Early" is more than 2 hours before midnight, "mid" is 2 hours to
 45 minutes before, "late" is the last 45 minutes. A weight of 0 means never.
 
+**First cards:** `"starter": true` marks a card a brand-new guest can get first. Keep
+starters quick and friendly (a selfie, get a drink). If no card is a starter, any card can come first.
+
+**One-time cards:** `"once": true` means the card never comes back after someone does it,
+even when the deck starts over (used for "Send Albert $1"). If they skip it, it can come back.
+
 **Settings** at the top of `cards.json`: party name, the `albert_handle` shown in the
 "Send Albert $1" card, `approve_photos` (true = photos stay off the TV until you
-approve them in the host page), and how many photos bounce on the TV at once.
+approve them in the host page), `tv_photo_limit` (how many photos bounce on the TV at
+once), and `skip_wait_seconds` (see Scoring).
 
 ## Host page
 
@@ -54,7 +61,12 @@ approve them in the host page), and how many photos bounce on the TV at once.
   Results show on the TV as bars, a number summary, or word chips.
 - **Icon match**: gives pairs of players the same emoji; they find each other.
 - **Flash QR**: puts a timed QR code on the TV; anyone who scans it in time gets bonus points.
-- **Finale**: midnight screen with final scores. Turn it off to resume.
+- **Midnight**: happens by itself. In the last minute the TV shows a giant countdown, then
+  the finale: final scores (tied players share a medal), confetti, and a slideshow of the
+  night's photos. Phones show each guest's score and place. "Finale off" resumes the game.
+- **End the game early**: the same finale screen, but "Thanks for playing!" instead of
+  Happy New Year. For parties that wrap up before midnight.
+- **Polls** close when you press Close poll; the final results stay on the TV for 20 seconds.
 - **Photos**: tap one to hide or show it on the TV.
 - **Print the secret QR codes**: prints the QR tags for the scavenger-hunt cards.
 - **Reset**: wipes players, scores, and photos. Use it after rehearsal!
@@ -63,6 +75,11 @@ approve them in the host page), and how many photos bounce on the TV at once.
 
 Completing a card earns its `points`. Skipping earns 0. Poll answers earn 1, icon match 2,
 flash QR 3 (adjustable), midnight guess within 10 minutes +2.
+
+Points should match effort. Text answers and "Done" buttons can't be checked, so they're
+worth 1. Photos, drawings and scavenger hunts are worth 3 to 5. Skipping is free once,
+but a second skip in a row waits `skip_wait_seconds` (default 20). Doing a card ends the
+wait. Without this, the best strategy is to skip everything hard and tap through the easy cards.
 
 ## Sensors need https
 

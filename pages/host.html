@@ -46,7 +46,13 @@
     <input id="fbonus" type="number" value="3" style="width:60px"> pts
     <button id="flash">Flash QR on TV</button>
   </div>
-  <div class="row"><button id="finale">Finale screen: ON</button><button class="dim" id="finaleoff">Finale: OFF</button></div>
+  <div class="row"><span class="dim-t">The midnight countdown and finale start by themselves at midnight.</span></div>
+  <div class="row">
+    <button class="red" id="endearly">End the game early 🎉</button>
+    <button class="dim" id="finale">Show midnight finale now</button>
+    <button class="dim" id="finaleoff">Finale off (keep playing)</button>
+    <span class="dim-t" id="finalestate"></span>
+  </div>
 </section>
 
 <section>
@@ -95,6 +101,7 @@ async function load() {
   }
   $('#pollstate').textContent = d.poll ? `${d.poll.open ? 'OPEN' : 'closed'}: "${d.poll.question}" (${d.poll.count} answers)` : 'No poll running';
   $('#iconstate').textContent = d.icon ? `${d.icon.found}/${d.icon.total} found` : '';
+  $('#finalestate').textContent = d.finale ? (d.finale_kind === 'thanks' ? 'Showing: Thanks for playing' : 'Showing: Happy New Year') : '';
 
   $('#photos').innerHTML = d.photos.map(p => `<div class="ph ${p.status}" data-id="${p.id}" data-s="${p.status}"><img src="${p.url}"><div><b>${esc(p.name)}</b> · ${p.status}</div></div>`).join('') || '<span class="dim-t">No photos yet</span>';
   document.querySelectorAll('.ph').forEach(el => el.onclick = () => call('/api/host/photo', { id: el.dataset.id, status: el.dataset.s === 'visible' ? 'hidden' : 'visible' }));
@@ -109,7 +116,10 @@ $('#clearpoll').onclick = () => call('/api/host/poll/clear');
 $('#icons').onclick = () => call('/api/host/icons/start');
 $('#iconsend').onclick = () => call('/api/host/icons/clear');
 $('#flash').onclick = () => call('/api/host/flash', { seconds: +$('#fsec').value, bonus: +$('#fbonus').value });
-$('#finale').onclick = () => call('/api/host/finale', { on: true });
+// Both finales hide everyone's cards, so ask first (easy to tap by accident).
+// "Thanks" shows the same final scores and photos, with a thank-you instead of Happy New Year.
+$('#endearly').onclick = () => { if (confirm('End the game for everyone and show the final scores?')) call('/api/host/finale', { on: true, kind: 'thanks' }); };
+$('#finale').onclick = () => { if (confirm('Show the Happy New Year finale now?')) call('/api/host/finale', { on: true, kind: 'midnight' }); };
 $('#finaleoff').onclick = () => call('/api/host/finale', { on: false });
 $('#reset').onclick = () => { if (confirm('Wipe all players, scores and photos?')) call('/api/host/reset'); };
 $('#printlink').href = '/host/print?key=' + encodeURIComponent(key);

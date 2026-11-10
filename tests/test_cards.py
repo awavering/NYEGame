@@ -42,6 +42,9 @@ def edited(mutate):
         (lambda d: d["cards"][0].update(type="timer", minutes=0), "minutes"),
         (lambda d: d["cards"][0].update(camera="rear"), "camera must be"),
         (lambda d: d["cards"][0].update(grade="vibes"), '"grade" only works'),
+        (lambda d: d["cards"][0].update(once="yes"), '"once" must be true or false'),
+        (lambda d: d["cards"][0].update(starter=1), '"starter" must be true or false'),
+        (lambda d: d["settings"].update(skip_wait_seconds=-5), '"skip_wait_seconds" must be a number'),
         (lambda d: d.update(cards=[]), "non-empty list"),
         (
             lambda d: d["poll_presets"].append({"question": "Q", "kind": "choice", "options": ["a"]}),

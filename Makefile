@@ -28,7 +28,7 @@ dev:  ## rehearsal: fake clock (HOURS=3 means midnight in 3 hours), separate dat
 	MIDNIGHT_ISO=$$MIDNIGHT_ISO GAME_DATA_DIR=.dev-data $(PY) app.py
 
 sim:  ## fake guests for rehearsing (needs `make dev` or `make run` going; PLAYERS=8)
-	$(PY) tools/simulate_guests.py --players $(PLAYERS) --minutes 3
+	$(PY) tools/simulate_guests.py --url http://localhost:$(or $(PORT),5000) --players $(PLAYERS) --minutes 3
 
 test:  ## run the tests
 	$(PY) -m pytest

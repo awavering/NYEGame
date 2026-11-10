@@ -78,16 +78,31 @@ async function showJoin() {
     <div class="card">
       <div class="cat">Welcome</div>
       <h1>${esc(cfg.party_name || 'Party Game')}</h1>
-      <p class="hint">Pick a name. You'll get a task right away.</p>
-      <input type="text" id="name" maxlength="20" placeholder="Your name" autocomplete="off">
-      <button class="big" id="join">Let's go</button>
+      <p class="hint">Your phone gives you little tasks. Do them for points: your score and your photos show up on the TV.</p>
+      <form id="joinform">
+        <input type="text" id="name" maxlength="20" placeholder="Your name" autocomplete="off" enterkeyhint="go">
+        <button class="big" id="join">Let's go</button>
+      </form>
       <div class="msg" id="msg"></div>
     </div>`;
-  $('#join').onclick = async () => {
+  // A <form> means the keyboard's Enter / Go key submits too, not just the button.
+  onSubmit('#joinform', async () => {
     const r = await post('/api/join', { name: $('#name').value });
     if (r.error) return setMsg(r.error);
     pid = r.pid; localStorage.setItem('pid', pid);
     me = null; cardKey = ''; start();
+  });
+}
+
+/* Run `fn` when a form is submitted (button tap or Enter key). The `busy` flag
+   stops a double tap from sending the same answer twice. */
+function onSubmit(selector, fn) {
+  let busy = false;
+  $(selector).onsubmit = async (e) => {
+    e.preventDefault();               // stay on this page; we send it ourselves
+    if (busy) return;
+    busy = true;
+    try { await fn(); } finally { busy = false; }
   };
 }
 
@@ -99,10 +114,24 @@ async function refresh() {
   if (r.error) return;
   me = r;
   clockOffset = r.now - Date.now() / 1000;
+  skipReadyAt = Date.now() / 1000 + (r.skip_wait || 0);
   drawShell();
   drawModal();
   drawCard();
+  drawSkip();
 }
+
+/* After a skip, the next card can't be skipped for a few seconds (the server
+   decides how long). Show the countdown on the button instead of an error. */
+let skipReadyAt = 0;
+function drawSkip() {
+  const b = $('#skip');
+  if (!b) return;
+  const left = Math.ceil(skipReadyAt - Date.now() / 1000);
+  b.disabled = left > 0;
+  b.textContent = left > 0 ? `Give it a try! Skip in ${left}s` : 'Skip this one';
+}
+setInterval(drawSkip, 500);
 
 function drawShell() {
   if (!$('#shell')) {
@@ -121,9 +150,14 @@ function drawModal() {
   const el = $('#modal');
   let key = 'none', html = '';
   if (me.finale) {
-    key = 'finale';
-    html = `<div class="modal"><div class="card"><div class="emoji">🎆</div><h1>Happy New Year!</h1>
-      <p class="hint">You finished with</p><div class="big-num">${me.points}</div><p class="hint">points. Look at the big screen!</p></div></div>`;
+    // "midnight" = Happy New Year; "thanks" = the host ended the game early.
+    const thanks = me.finale_kind === 'thanks';
+    key = 'finale' + me.finale_kind + me.points + '|' + me.rank;
+    const place = me.rank <= 3 ? ['🥇 1st', '🥈 2nd', '🥉 3rd'][me.rank - 1] : '#' + me.rank;
+    html = `<div class="modal"><div class="card"><div class="emoji">${thanks ? '🎉' : '🎆'}</div>
+      <h1>${thanks ? 'Thanks for playing!' : 'Happy New Year!'}</h1>
+      <p class="hint">You finished with</p><div class="big-num">${me.points}</div>
+      <p class="hint">points, in ${place} place. Look at the big screen!</p></div></div>`;
   } else if (me.icon && !me.icon.found) {
     key = 'icon' + me.icon.id;
     const n = me.icon.group - 1;
@@ -137,7 +171,7 @@ function drawModal() {
     const p = me.poll;
     let inner = '';
     if (p.kind === 'choice') inner = `<div class="opts">${p.options.map((o, i) => `<button data-i="${i}">${esc(o)}</button>`).join('')}</div>`;
-    else inner = `<input type="${p.kind === 'number' ? 'number' : 'text'}" id="pans" ${p.kind === 'number' ? 'inputmode="decimal"' : ''} maxlength="40" placeholder="Your answer"><button class="big" id="psend">Send</button>`;
+    else inner = `<form id="pform"><input type="${p.kind === 'number' ? 'number' : 'text'}" id="pans" ${p.kind === 'number' ? 'inputmode="decimal"' : ''} maxlength="40" placeholder="Your answer" enterkeyhint="send"><button class="big" id="psend">Send</button></form>`;
     html = `<div class="modal"><div class="card"><div class="cat">Everyone answer!</div><h2>${esc(p.question)}</h2>${inner}
       <div class="msg" id="pmsg"></div><button class="skip" id="pskip">Not now</button></div></div>`;
   }
@@ -152,7 +186,7 @@ function drawModal() {
       toast('Answer sent! +1'); refresh();
     };
     document.querySelectorAll('.opts button').forEach(b => b.onclick = () => send(p.options[+b.dataset.i]));
-    const s = $('#psend'); if (s) s.onclick = () => send($('#pans').value);
+    if ($('#pform')) onSubmit('#pform', () => send($('#pans').value));
     $('#pskip').onclick = () => { dismissedPoll = p.id; drawModal(); };
   }
 }
@@ -176,6 +210,7 @@ function drawCard() {
     <button class="skip" id="skip">Skip this one</button>
   </div>`;
   $('#skip').onclick = () => respond('decline');
+  drawSkip();
   const body = $('#body');
   ({ confirm: cardConfirm, text: cardText, number: cardText, photo: cardPhoto, draw: cardDraw,
      secret_qr: cardSecret, timer: cardTimer, gforce: cardGforce, light: cardLight }[c.type] || cardConfirm)(c, body);
@@ -201,9 +236,9 @@ function cardConfirm(c, body) {
 /* text or number answer */
 function cardText(c, body) {
   const isNum = c.type === 'number';
-  body.innerHTML = `<input type="${isNum ? 'number' : 'text'}" ${isNum ? 'inputmode="decimal"' : ''} id="ans" maxlength="60" placeholder="${esc(c.placeholder || 'Your answer')}" autocomplete="off">
-    <button class="big" id="send">Submit</button>`;
-  $('#send').onclick = () => respond('done', $('#ans').value);
+  body.innerHTML = `<form id="ansform"><input type="${isNum ? 'number' : 'text'}" ${isNum ? 'inputmode="decimal"' : ''} id="ans" maxlength="60" placeholder="${esc(c.placeholder || 'Your answer')}" autocomplete="off" enterkeyhint="send">
+    <button class="big" id="send">Submit</button></form>`;
+  onSubmit('#ansform', () => respond('done', $('#ans').value));
 }
 
 /* photo: open the camera (or photo library), shrink it, upload it */
@@ -264,13 +299,13 @@ function cardDraw(c, body) {
    This page just waits, and also lets people type the code under the QR. */
 function cardSecret(c, body) {
   body.innerHTML = `<p class="hint">Scan it with your phone's regular camera app. This screen will update when you've found it.</p>
-    <input type="text" id="code" placeholder="Can't scan? Type the code under the QR" autocomplete="off" autocapitalize="off">
-    <button class="alt" id="go">Use code</button>`;
-  $('#go').onclick = async () => {
+    <form id="codeform"><input type="text" id="code" placeholder="Can't scan? Type the code under the QR" autocomplete="off" autocapitalize="off" enterkeyhint="go">
+    <button class="alt" id="go">Use code</button></form>`;
+  onSubmit('#codeform', async () => {
     const r = await post('/api/secret', { pid, code: $('#code').value });
     if (r.error) return setMsg(r.error);
     afterAnswer(r, 'done');
-  };
+  });
 }
 
 /* timer: server remembers when you pressed Start, so reloads are safe */

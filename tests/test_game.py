@@ -55,8 +55,8 @@ def test_text_card_needs_an_answer(make_player):
 
 def test_number_card_rejects_words(make_player):
     ann = make_player()
-    ann.give("t_watchers")
-    assert ann.respond("t_watchers", answer="lots").status_code == 400
+    ann.give("t_scoreboard")
+    assert ann.respond("t_scoreboard", answer="lots").status_code == 400
 
 
 def test_decline_scores_nothing_and_deals_a_new_card(make_player):
@@ -112,7 +112,7 @@ def test_gforce_reading_is_recorded_and_shown(client, make_player):
 def test_photo_upload_completes_the_card_and_is_resized(client, make_player):
     ann = make_player()
     ann.give("selfie")
-    assert ann.upload("selfie").get_json()["points_earned"] == 2
+    assert ann.upload("selfie").get_json()["points_earned"] == 3
     files = list(Path(game.UPLOADS).glob("*.jpg"))
     assert len(files) == 1
     assert max(Image.open(files[0]).size) <= 900
@@ -164,7 +164,7 @@ def test_timer_card(client, make_player):
     card = ann.me()["card"]
     assert card["ready_at"] - card["started_at"] == 15 * 60
     game.state["players"][ann.pid]["current"]["started_at"] -= 15 * 60 + 1  # fast-forward
-    assert ann.respond("no_phone").get_json()["points_earned"] == 3
+    assert ann.respond("no_phone").get_json()["points_earned"] == 5
 
 
 def test_secret_qr(client, make_player):
@@ -175,7 +175,7 @@ def test_secret_qr(client, make_player):
     assert other["note"].startswith("Nice find")  # a real code, but not their task
     assert ann.points == 0
     found = client.post("/api/secret", json={"pid": ann.pid, "code": "PLUM42"}).get_json()
-    assert found["points_earned"] == 2  # codes are not case sensitive
+    assert found["points_earned"] == 4  # codes are not case sensitive
 
 
 def test_secret_qr_before_joining_asks_to_join(client):
@@ -362,6 +362,7 @@ def test_player_sees_every_card_before_a_repeat(make_player):
     for _ in range(deck):
         card_id = ann.me()["card"]["id"]
         seen.append(card_id)
+        game.state["players"][ann.pid].pop("skip_ready_at", None)  # no skip wait in this test
         ann.respond(card_id, "decline")
     assert len(set(seen)) == deck
 
@@ -409,3 +410,116 @@ def test_reset_wipes_players_scores_and_photos(client, make_player, host):
     assert game.state["players"] == {}
     assert list(Path(game.UPLOADS).glob("*.jpg")) == []
     assert client.get(f"/api/me?pid={ann.pid}").status_code == 404
+
+
+# ---------------------------------------------------------------- skipping, starter and once cards
+
+
+def test_skipping_twice_in_a_row_has_to_wait(make_player):
+    ann = make_player()
+    ann.give("lego")
+    assert ann.respond("lego", "decline").status_code == 200  # the first skip is free
+    me = ann.me()
+    assert me["skip_wait"] > 0
+    second = ann.respond(me["card"]["id"], "decline")
+    assert second.status_code == 400 and "skip again" in second.get_json()["error"]
+    game.state["players"][ann.pid]["skip_ready_at"] = 0  # pretend the wait is over
+    assert ann.respond(me["card"]["id"], "decline").status_code == 200
+
+
+def test_doing_a_card_ends_the_skip_wait(make_player):
+    ann = make_player()
+    ann.give("lego")
+    ann.respond("lego", "decline")
+    ann.give("get_drink")
+    ann.respond("get_drink")
+    assert ann.me()["skip_wait"] == 0
+
+
+def test_skip_wait_can_be_turned_off(make_player, monkeypatch):
+    monkeypatch.setattr(game, "settings", lambda: {"skip_wait_seconds": 0})
+    ann = make_player()
+    for _ in range(3):
+        assert ann.respond(ann.me()["card"]["id"], "decline").status_code == 200
+
+
+def test_new_guests_start_on_a_starter_card(make_player):
+    starters = {c["id"] for c in game.load_cards()["cards"] if c.get("starter")}
+    random.seed(3)
+    for i in range(20):
+        assert make_player(f"Guest{i}").me()["card"]["id"] in starters
+
+
+def skip_through(player, times):
+    """Skip `times` cards in a row (ignoring the skip wait); return the ids dealt."""
+    dealt = []
+    for _ in range(times):
+        game.state["players"][player.pid].pop("skip_ready_at", None)
+        card_id = player.me()["card"]["id"]
+        dealt.append(card_id)
+        player.respond(card_id, "decline")
+    return dealt
+
+
+def test_once_card_never_comes_back_after_it_is_done(make_player):
+    ann = make_player()
+    ann.give("venmo_albert")
+    ann.respond("venmo_albert")
+    deck = len(game.load_cards()["cards"])
+    assert "venmo_albert" not in skip_through(ann, 3 * deck)  # three trips through the deck
+
+
+def test_skipped_once_card_comes_back_with_the_deck(make_player):
+    ann = make_player()
+    ann.give("venmo_albert")
+    ann.respond("venmo_albert", "decline")
+    deck = len(game.load_cards()["cards"])
+    assert "venmo_albert" in skip_through(ann, 2 * deck)
+
+
+# ---------------------------------------------------------------- midnight, ending early, polls on the TV
+
+
+def test_finale_starts_by_itself_at_midnight_only_once(client, make_player, host, monkeypatch):
+    ann = make_player()
+    tv = client.get("/api/tv").get_json()
+    assert not tv["finale"] and tv["seconds_to_midnight"] == 5 * 3600
+    monkeypatch.setattr(game, "hours_to_midnight", lambda: -0.01)  # just after midnight
+    tv = client.get("/api/tv").get_json()
+    assert tv["finale"] and tv["finale_kind"] == "midnight"
+    # The host can turn it off to keep partying, and it stays off.
+    client.post("/api/host/finale", json={"on": False}, headers=host)
+    assert not client.get("/api/tv").get_json()["finale"]
+    assert ann.me()["card"] is not None
+
+
+def test_host_can_end_the_game_early_with_a_thank_you(client, make_player, host, monkeypatch):
+    ann = make_player()
+    client.post("/api/host/finale", json={"on": True, "kind": "thanks"}, headers=host)
+    me = ann.me()
+    assert me["finale"] and me["finale_kind"] == "thanks" and me["card"] is None
+    assert client.get("/api/tv").get_json()["finale_kind"] == "thanks"
+    # Midnight arriving later doesn't swap the thank-you for Happy New Year.
+    monkeypatch.setattr(game, "hours_to_midnight", lambda: -0.01)
+    assert client.get("/api/tv").get_json()["finale_kind"] == "thanks"
+    assert client.post("/api/host/finale", json={"on": True, "kind": "rave"}, headers=host).status_code == 400
+
+
+def test_finale_gets_every_photo_and_each_players_place(client, make_player, host):
+    ann, ben, cal = make_player("Ann"), make_player("Ben"), make_player("Cal")
+    ann.give("selfie")
+    ann.upload("selfie")
+    assert client.get("/api/tv").get_json()["finale_photos"] == []  # only sent during the finale
+    client.post("/api/host/finale", json={"on": True}, headers=host)
+    assert len(client.get("/api/tv").get_json()["finale_photos"]) == 1
+    assert ann.me()["rank"] == 1
+    assert ben.me()["rank"] == cal.me()["rank"] == 2  # tied scores share a place
+
+
+def test_closed_poll_leaves_the_tv_after_a_while(client, host):
+    client.post("/api/host/poll", json={"question": "Best snack?", "kind": "text"}, headers=host)
+    client.post("/api/host/poll/close", headers=host)
+    assert client.get("/api/tv").get_json()["poll"]["open"] is False  # final results still showing
+    game.state["poll"]["closed_at"] -= game.POLL_RESULTS_SECONDS + 1
+    assert client.get("/api/tv").get_json()["poll"] is None
+    assert client.get("/api/host/data", headers=host).get_json()["poll"]  # the host still sees it
