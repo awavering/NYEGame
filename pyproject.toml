@@ -1,0 +1,17 @@
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]  # long lines are left to the formatter
+
+[tool.ruff.lint.per-file-ignores]
+# conftest has to set environment variables before importing the app.
+"tests/conftest.py" = ["E402"]
+"tests/helpers.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,3 +1,12 @@
+# created while the game runs; never commit a real party's data
 state.json
+state.json.tmp
 uploads/
+
+# local environment and tool caches
+.env
+.venv/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
+.DS_Store

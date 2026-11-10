@@ -154,7 +154,7 @@ function showOverlay(d) {
       <p class="label" style="margin-top:28px">${d.completed} tasks completed · ${d.photo_total} photos</p>`;
   }
   if (d.flash) {
-    const pct = Math.max(0, 100 * d.flash.remaining / 60);
+    const pct = Math.max(0, 100 * d.flash.remaining / (d.flash.total || 60));
     return `<h2>⚡ FLASH QR! +${d.flash.bonus} points ⚡</h2>
       <img id="flashqr" src="/qr/flash/${d.flash.token}.png" alt="">
       <div class="meter"><div style="width:${Math.min(100, pct)}%"></div></div>
