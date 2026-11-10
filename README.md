@@ -12,7 +12,7 @@ It prints three links:
 
 - **TV**: open `/tv` full-screen in a browser on the TV (or a laptop plugged into it).
 - **Phones**: guests scan the QR code on the TV, which goes to `/play`.
-- **Host**: open `/host?key=host` on your own phone. Change the key by starting the
+- **Host**: open `/host?key=albert` on your own phone. Change the key by starting the
   server with `HOST_KEY=something python app.py`.
 
 Your laptop and the guests' phones must be on the same WiFi. If phones can't connect,

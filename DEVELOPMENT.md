@@ -91,7 +91,7 @@ sensors can't be simulated.
 ## Before the party
 
 - [ ] Put the real payment handle in `settings.albert_handle` (`make cards` warns until you do).
-- [ ] Set `HOST_KEY` to something other than `host`.
+- [ ] Set `HOST_KEY` to something other than `albert`.
 - [ ] `make cards` and `make check` pass.
 - [ ] Rehearse on real phones, on the real WiFi, with the real TV.
 - [ ] G-force and "brightest light" need `https://`. Test them through your tunnel or host.

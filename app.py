@@ -4,7 +4,7 @@ NYE party game server.
 Run it:   python app.py
 TV:       http://<your-ip>:5000/tv
 Phones:   scan the QR code on the TV (goes to /play)
-Host:     http://<your-ip>:5000/host?key=host     (change the key with HOST_KEY)
+Host:     http://<your-ip>:5000/host?key=albert   (change the key with HOST_KEY)
 
 Everything that guests see is driven by cards.json. State is saved to
 state.json after every change, so a restart does not lose the game.
@@ -57,7 +57,7 @@ STATE_FILE = os.path.join(DATA_DIR, "state.json")
 CARDS_FILE = os.environ.get("CARDS_FILE", os.path.join(BASE, "cards.json"))
 os.makedirs(UPLOADS, exist_ok=True)
 
-HOST_KEY = os.environ.get("HOST_KEY", "host")
+HOST_KEY = os.environ.get("HOST_KEY", "albert")
 PORT = int(os.environ.get("PORT", "5000"))
 TZ = ZoneInfo(os.environ.get("TZ_NAME", "America/Denver"))
 # For testing you can fake the countdown, e.g. MIDNIGHT_ISO=2026-10-16T00:00:00
