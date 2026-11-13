@@ -121,9 +121,9 @@ def test_photo_upload_completes_the_card_and_is_resized(client, make_player):
 
 def test_junk_upload_is_rejected(make_player):
     ann = make_player()
-    ann.give("crusty")
-    assert ann.upload("crusty", data=b"not an image").status_code == 400
-    assert ann.me()["card"]["id"] == "crusty"  # still theirs to complete
+    ann.give("crispy")
+    assert ann.upload("crispy", data=b"not an image").status_code == 400
+    assert ann.me()["card"]["id"] == "crispy"  # still theirs to complete
 
 
 def test_draw_prompt_names_the_thing_to_draw(make_player):
@@ -150,6 +150,31 @@ def test_approve_photos_setting_hides_new_photos_until_approved(client, make_pla
     photo = client.get("/api/host/data", headers=host).get_json()["photos"][0]
     client.post("/api/host/photo", json={"id": photo["id"], "status": "visible"}, headers=host)
     assert len(client.get("/api/tv").get_json()["photos"]) == 1
+
+
+def test_a_card_can_carry_a_picture(client, make_player):
+    ann = make_player()
+    ann.give("crispy")
+    assert ann.me()["card"]["image"] == "/assets/dog.png"
+    ann.give("selfie")
+    assert "image" not in ann.me()["card"]
+    served = client.get("/assets/dog.png")
+    assert served.status_code == 200 and served.mimetype == "image/png"
+
+
+def test_assets_cannot_reach_outside_their_folder(client):
+    assert client.get("/assets/nothing.png").status_code == 404
+    assert client.get("/assets/..%2Fapp.py").status_code == 404
+    assert client.get("/assets/..%2F..%2Fcards.json").status_code == 404
+
+
+def test_the_tv_is_told_which_mascot_to_show(client):
+    assert client.get("/api/config").get_json()["mascot"] == "/assets/dog.png"
+
+
+def test_no_mascot_when_not_configured(client, monkeypatch):
+    monkeypatch.setattr(game, "settings", lambda: {"party_name": "X"})
+    assert client.get("/api/config").get_json()["mascot"] is None
 
 
 # ---------------------------------------------------------------- timer and secret QR

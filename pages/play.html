@@ -5,33 +5,41 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Party Game</title>
 <style>
-  :root { --bg:#12101f; --card:#1f1b36; --ink:#f4f1ff; --dim:#a9a3c9; --accent:#ffcc33; --good:#3ddc97; --bad:#ff6b81; }
+  :root { --bg:#12101f; --card:#1f1b36; --ink:#f4f1ff; --dim:#a9a3c9; --accent:#ffcc33; --good:#3ddc97; --bad:#ff6b81;
+          /* Spacing scale: every gap on this page is one of these, so things line up.
+             Rule of thumb: --s3 between stacked things in a card, --s2 to tuck a small
+             label against what it labels, --s4 before a new group (and the page edge). */
+          --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; min-height:100vh; }
-  #app { max-width:520px; margin:0 auto; padding:16px; padding-bottom:60px; }
-  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  #app { max-width:520px; margin:0 auto; padding:var(--s4) var(--s4) calc(var(--s5) * 2); }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--s4); }
   header .who { font-weight:700; font-size:18px; }
-  header .pts { background:var(--accent); color:#222; font-weight:800; padding:6px 12px; border-radius:999px; }
-  .card { background:var(--card); border-radius:20px; padding:22px; box-shadow:0 8px 30px rgba(0,0,0,.35); }
-  .cat { text-transform:uppercase; letter-spacing:.12em; font-size:12px; color:var(--accent); font-weight:700; }
-  h1 { margin:6px 0 14px; font-size:30px; }
-  h2 { margin:8px 0 10px; font-size:24px; line-height:1.25; }
-  .hint { color:var(--dim); margin:0 0 14px; }
-  input[type=text], input[type=number] { width:100%; padding:14px; font-size:18px; border-radius:12px; border:2px solid #3a3562; background:#14112a; color:var(--ink); margin-bottom:10px; }
-  button { font-size:18px; border:none; border-radius:14px; padding:14px 18px; cursor:pointer; font-weight:700; }
-  button.big { width:100%; background:var(--good); color:#08261a; margin-bottom:10px; }
-  button.alt { width:100%; background:#3a3562; color:var(--ink); margin-bottom:10px; }
-  button.skip { background:transparent; color:var(--dim); font-size:15px; padding:10px; width:100%; margin-top:6px; }
+  header .pts { background:var(--accent); color:#222; font-weight:800; padding:var(--s1) var(--s3); border-radius:999px; }
+  .card { background:var(--card); border-radius:20px; padding:var(--s5); box-shadow:0 8px 30px rgba(0,0,0,.35); }
+  .card > :last-child { margin-bottom:0; }   /* the card's own padding is the space at the bottom */
+  .cat { text-transform:uppercase; letter-spacing:.12em; font-size:12px; color:var(--accent); font-weight:700; margin-bottom:var(--s2); }
+  h1 { margin:0 0 var(--s3); font-size:30px; }
+  h2 { margin:0 0 var(--s3); font-size:24px; line-height:1.25; }
+  p { margin:0; }                         /* no browser-default paragraph gaps; spacing comes from the rules here */
+  .hint { color:var(--dim); margin-bottom:var(--s4); }
+  input[type=text], input[type=number] { width:100%; padding:var(--s3) var(--s4); font-size:18px; border-radius:12px; border:2px solid #3a3562; background:#14112a; color:var(--ink); margin:0 0 var(--s3); }
+  button { font-size:18px; border:none; border-radius:12px; padding:var(--s3) var(--s4); cursor:pointer; font-weight:700; }
+  button.big { width:100%; background:var(--good); color:#08261a; margin-bottom:var(--s3); }
+  button.alt { width:100%; background:#3a3562; color:var(--ink); margin-bottom:var(--s3); }
+  button.skip { background:transparent; color:var(--dim); font-size:15px; padding:var(--s1) var(--s2) var(--s2); width:100%; }
   button:disabled { opacity:.45; }
-  .msg { color:var(--bad); min-height:22px; margin-top:8px; }
-  .toast { position:fixed; left:50%; top:18px; transform:translateX(-50%); background:var(--good); color:#06281b; font-weight:800; padding:12px 18px; border-radius:14px; z-index:50; max-width:90%; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.4); }
-  canvas#pad { width:100%; aspect-ratio:1/1; background:#fff; border-radius:14px; touch-action:none; margin-bottom:10px; }
-  video#cam { width:100%; border-radius:14px; background:#000; margin-bottom:10px; }
-  .big-num { font-size:56px; font-weight:900; text-align:center; margin:8px 0 14px; }
-  .modal { position:fixed; inset:0; background:rgba(10,8,25,.92); display:flex; align-items:center; justify-content:center; padding:20px; z-index:40; }
+  /* Error line: keeps its height when empty so the Skip button doesn't jump when an error appears. */
+  .msg { color:var(--bad); min-height:20px; }
+  .toast { position:fixed; left:50%; top:var(--s4); transform:translateX(-50%); background:var(--good); color:#06281b; font-weight:800; padding:var(--s3) var(--s4); border-radius:12px; z-index:50; max-width:90%; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+  canvas#pad { display:block; width:100%; aspect-ratio:1/1; background:#fff; border-radius:12px; touch-action:none; margin-bottom:var(--s3); }
+  video#cam { display:block; width:100%; border-radius:12px; background:#000; margin-bottom:var(--s3); }
+  .sprite { display:block; margin:0 auto var(--s3); image-rendering:pixelated; }
+  .big-num { font-size:56px; font-weight:900; text-align:center; line-height:1.1; margin-bottom:var(--s3); }
+  .modal { position:fixed; inset:0; background:rgba(10,8,25,.92); display:flex; align-items:center; justify-content:center; padding:var(--s4); z-index:40; }
   .modal .card { width:100%; max-width:480px; text-align:center; }
-  .emoji { font-size:120px; line-height:1.1; }
-  .opts button { width:100%; margin-bottom:10px; background:#3a3562; color:var(--ink); }
+  .emoji { font-size:120px; line-height:1.1; margin-bottom:var(--s2); }
+  .opts button { width:100%; margin-bottom:var(--s3); background:#3a3562; color:var(--ink); }
   .small { color:var(--dim); font-size:14px; }
 </style>
 </head>
@@ -203,12 +211,16 @@ function drawCard() {
 
   wrap.innerHTML = `<div class="card">
     <div class="cat">${esc(c.category)} · ${c.points} pt${c.points > 1 ? 's' : ''}</div>
+    ${c.image ? `<img class="sprite" src="${esc(c.image)}" alt="">` : ''}
     <h2>${esc(c.prompt)}</h2>
     ${c.hint ? `<p class="hint">${esc(c.hint)}</p>` : ''}
     <div id="body"></div>
     <div class="msg" id="msg"></div>
     <button class="skip" id="skip">Skip this one</button>
   </div>`;
+  // Pixel-art pictures are drawn at a whole-number multiple of their real size so they stay sharp.
+  const sprite = wrap.querySelector('.sprite');
+  if (sprite) sprite.onload = () => { sprite.style.width = sprite.naturalWidth * Math.max(1, Math.floor(180 / sprite.naturalHeight)) + 'px'; };
   $('#skip').onclick = () => respond('decline');
   drawSkip();
   const body = $('#body');

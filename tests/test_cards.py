@@ -16,8 +16,40 @@ SHIPPED = json.loads((ROOT / "cards.json").read_text(encoding="utf-8"))
 
 
 def test_shipped_cards_are_valid():
-    errors, warnings = validate(SHIPPED)
+    errors, warnings = validate(SHIPPED, assets_dir=ROOT / "pages" / "assets")
     assert errors == []
+
+
+def test_image_fields_are_checked():
+    assets = ROOT / "pages" / "assets"
+
+    def card_image(value):
+        def mutate(d):
+            d["cards"][0]["image"] = value
+
+        data = copy.deepcopy(SHIPPED)
+        mutate(data)
+        return validate(data, assets_dir=assets)[0]
+
+    assert card_image("dog.png") == []
+    assert any("file name like" in e for e in card_image("../dog.png"))
+    assert any("file name like" in e for e in card_image("pages/assets/dog.png"))
+    assert any("file name like" in e for e in card_image("dog.svg"))
+    assert any("file name like" in e for e in card_image(7))
+    assert any("not found" in e for e in card_image("ghost.png"))
+
+
+def test_mascot_setting_is_checked():
+    data = copy.deepcopy(SHIPPED)
+    data["settings"]["mascot"] = "ghost.png"
+    assert any(
+        "settings.mascot" in e and "not found" in e
+        for e in validate(data, assets_dir=ROOT / "pages" / "assets")[0]
+    )
+    data["settings"]["mascot"] = "a/b.png"
+    assert any("settings.mascot" in e for e in validate(data)[0])
+    del data["settings"]["mascot"]  # no mascot at all is fine
+    assert validate(data)[0] == []
 
 
 def test_there_are_enough_cards_for_a_party():

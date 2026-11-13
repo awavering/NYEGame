@@ -19,6 +19,15 @@
   .url { font-family:ui-monospace,Menlo,monospace; font-size:clamp(12px,1.1vw,20px); color:var(--accent); word-break:break-all; }
   .count { font-size:clamp(36px,4vw,72px); font-weight:900; line-height:1; }
   .clock { margin-top:auto; color:var(--ink); font-size:clamp(18px,1.8vw,34px); font-weight:800; }
+  /* mascot: a pixel-art sprite; --px (set by script) is its whole-number scale */
+  #mascot { flex:1; min-height:0; width:100%; display:flex; align-items:flex-end; justify-content:center; position:relative; visibility:hidden; }
+  #mascot.on { visibility:visible; }
+  #dog { display:block; image-rendering:pixelated; --px:1; animation:bob 1.6s steps(1,end) infinite; }
+  @keyframes bob { 0% { transform:translateY(0); } 50% { transform:translateY(calc(var(--px) * -1px)); } }
+  #dog.hop { animation:hop .7s steps(1,end) 1; }
+  @keyframes hop { 0% { transform:translateY(0); } 15% { transform:translateY(calc(var(--px) * -5px)); } 35% { transform:translateY(calc(var(--px) * -8px)); } 55% { transform:translateY(calc(var(--px) * -5px)); } 75% { transform:translateY(calc(var(--px) * -1px)); } 100% { transform:translateY(0); } }
+  #bubble { position:absolute; top:0; left:50%; transform:translateX(-50%); background:#fff; color:#222; font-weight:700; padding:8px 14px; border-radius:14px; font-size:clamp(14px,1.3vw,24px); text-align:center; opacity:0; transition:opacity .2s; max-width:100%; }
+  #bubble.show { opacity:1; }
 
   /* ---- bouncing photos (big enough to see from the couch) ---- */
   #stage { position:relative; overflow:hidden; border-radius:24px; border:2px dashed rgba(255,255,255,.08); }
@@ -86,11 +95,20 @@
   @keyframes fall { to { transform:translateY(112vh) rotate(720deg); } }
 
   /* a newly uploaded photo gets a few seconds full screen */
-  #spotlight { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; background:rgba(8,6,20,.92); z-index:15; }
+  #spotlight { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; background:rgba(8,6,20,.92); z-index:15;
+               transition:background-color .8s ease; }
   #spotlight.show { display:flex; animation:pop .5s ease-out; }
-  #spotlight .slide { transform:rotate(-1.5deg); max-width:70vw; }
+  #spotlight .slide { transform:rotate(-1.5deg); max-width:70vw;
+                      transition:transform .9s cubic-bezier(.55,0,.25,1), opacity .3s ease .65s; }
   #spotlight img { height:68vh; width:auto; max-width:66vw; }
-  #spotlight .label { margin-bottom:16px; font-size:clamp(16px,1.6vw,28px); color:var(--accent); }
+  #spotlight .label { margin-bottom:16px; font-size:clamp(16px,1.6vw,28px); color:var(--accent); transition:opacity .3s; }
+  /* leaving: the backdrop fades away while the big photo flies down onto its bouncing card */
+  #spotlight.leaving { background-color:rgba(8,6,20,0); }
+  #spotlight.leaving > .label { opacity:0; }
+  #spotlight.leaving .slide { opacity:0; }
+  /* a card waiting for its spotlight to finish: invisible, then fades in as the big photo lands */
+  .bounce { transition:opacity .35s ease; }
+  .bounce.waiting { opacity:0; }
 
   /* small join QR in the corner, so late arrivals can still join during a poll */
   #cornerjoin { position:fixed; left:2vw; bottom:2vw; z-index:30; display:none; background:#fff; color:#222; border-radius:16px; padding:10px; text-align:center; font-weight:800; font-size:clamp(12px,1vw,18px); }
@@ -108,6 +126,7 @@
     <img id="qr" src="/qr/join.png" alt="Join QR code">
     <div class="url" id="joinurl"></div>
     <div><div class="count" id="players">0</div><div class="label">players</div></div>
+    <div id="mascot"><div id="bubble"></div><img id="dog" alt=""></div>
     <div class="clock" id="clock"></div>
   </section>
 
@@ -181,6 +200,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   const W = stage.clientWidth, H = stage.clientHeight;
   for (const b of bouncers.values()) {
+    if (b.frozen) continue;     // holding still so the spotlight photo can land on it
     const h = b.el.offsetHeight || cardW * 1.15;
     b.x += b.vx * dt; b.y += b.vy * dt;
     if (b.x < 0) { b.x = 0; b.vx = Math.abs(b.vx); }
@@ -212,10 +232,40 @@ function playSpotlight() {
   const p = spotQueue.shift();
   const el = $('#spotlight');
   spotBusy = true;
+  // Its small bouncing card hides while the big version is on screen, so the
+  // photo is never in two places at once.
+  const b = bouncers.get(p.id);
+  if (b) { b.el.classList.remove('pop'); b.el.classList.add('waiting'); }
+  el.className = '';
   el.innerHTML = `<div class="label">📸 New photo</div>
     <div class="slide"><img src="${esc(p.url)}" alt=""><b>${esc(p.name)}</b><span class="label" style="color:#555">${esc(p.prompt)}</span></div>`;
   el.classList.add('show');
-  setTimeout(() => { el.classList.remove('show'); spotBusy = false; spotEndedAt = Date.now(); }, 5000);
+  setTimeout(() => flyHome(p), 5000);
+}
+
+/* End of a spotlight: shrink the big photo and slide it onto the spot where its
+   card is bouncing, while the dark backdrop fades. When it lands, the real card
+   fades in underneath and carries on bouncing, so it looks like one photo.
+
+   How: measure where the big photo is and where its card is right now (the
+   card holds still meanwhile), then let a CSS transition move and scale the big
+   photo by the difference. */
+function flyHome(p) {
+  const el = $('#spotlight'), slide = el.querySelector('.slide'), b = bouncers.get(p.id);
+  const done = () => {
+    el.classList.remove('show', 'leaving');
+    if (b) { b.frozen = false; b.el.classList.remove('waiting'); }
+    spotBusy = false; spotEndedAt = Date.now();
+  };
+  if (!b || !slide) { done(); return; }    // the host hid this photo in the meantime
+  b.frozen = true;
+  const from = slide.getBoundingClientRect(), to = b.el.getBoundingClientRect();
+  const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
+  const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
+  slide.style.transform = `translate(${dx}px, ${dy}px) scale(${to.width / from.width})`;
+  el.classList.add('leaving');
+  setTimeout(() => b.el.classList.remove('waiting'), 650);   // card appears as the big photo fades
+  setTimeout(done, 1000);
 }
 
 /* ---------------- news-ticker feed ---------------- */
@@ -347,6 +397,38 @@ function chooseOverlay(d) {
   return { key: '', html: '' };
 }
 
+/* ---------------- mascot ----------------
+   A pixel-art sprite in the left panel (set settings.mascot in cards.json). It is drawn at a
+   whole-number multiple of its real size so the pixels stay sharp, bobs gently, and hops with a
+   speech bubble whenever someone completes (or skips) a task. */
+const mascot = $('#mascot'), dog = $('#dog'), bubble = $('#bubble');
+let bubbleTimer = null, lastTotal = null;
+
+function fitMascot() {
+  if (!dog.naturalWidth) return;
+  const k = Math.floor(Math.min(mascot.clientWidth / dog.naturalWidth, (mascot.clientHeight - 56) / dog.naturalHeight));
+  mascot.classList.toggle('on', k >= 2);              // too little room: hide it rather than squash it
+  if (k >= 2) { dog.style.width = dog.naturalWidth * k + 'px'; dog.style.setProperty('--px', k); }
+}
+function showMascot(url) { dog.onload = fitMascot; dog.src = url; }
+window.addEventListener('resize', fitMascot);
+dog.addEventListener('animationend', (e) => { if (e.animationName === 'hop') dog.classList.remove('hop'); });
+
+function say(text) {
+  bubble.textContent = text; bubble.classList.add('show');
+  clearTimeout(bubbleTimer); bubbleTimer = setTimeout(() => bubble.classList.remove('show'), 3000);
+}
+function mascotReacts(ev) {
+  if (!mascot.classList.contains('on')) return;
+  if (ev.result === 'done') {
+    const lines = [`Nice one, ${ev.name}!`, `Woof! Go ${ev.name}!`, `Good job, ${ev.name}!`, `${ev.name} did it!`];
+    say(lines[Math.floor(Math.random() * lines.length)]);
+    dog.classList.remove('hop'); void dog.offsetWidth; dog.classList.add('hop');   // restart the hop
+  } else if (ev.result === 'declined') {
+    say(`Aww, ${ev.name} skipped...`);
+  }
+}
+
 /* ---------------- main refresh ---------------- */
 let lastOverlay = null;
 async function tick() {
@@ -375,6 +457,10 @@ async function tick() {
   drawFeed(d.feed);
   syncPhotos(d.photos);
 
+  const total = d.completed + d.declined;         // react only to new events, not the ones already there at page load
+  if (lastTotal !== null && total > lastTotal && d.feed.length) mascotReacts(d.feed[0]);
+  lastTotal = total;
+
   const o = chooseOverlay(d);
   if (o.key !== lastOverlay) {
     lastOverlay = o.key;
@@ -386,7 +472,7 @@ async function tick() {
   $('#cornerjoin').classList.toggle('show', !!o.corner);
   playSpotlight();   // in case one was waiting for an overlay to finish
 }
-fetch('/api/config').then(r => r.json()).then(c => { $('#title').textContent = c.party_name; document.title = c.party_name; });
+fetch('/api/config').then(r => r.json()).then(c => { $('#title').textContent = c.party_name; document.title = c.party_name; if (c.mascot) showMascot(c.mascot); });
 tick(); setInterval(tick, 1500);
 </script>
 </body>
