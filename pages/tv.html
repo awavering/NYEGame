@@ -11,13 +11,20 @@
   html, body { height:100%; margin:0; overflow:hidden; }
   body { background:radial-gradient(circle at 50% 0%, #26204d 0%, var(--bg) 60%); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
   #layout { display:grid; grid-template-columns:minmax(320px,26vw) 1fr; grid-template-rows:minmax(0,1fr) auto; height:100vh; gap:16px; padding:16px; }
-  .panel { background:rgba(27,23,53,.9); border-radius:24px; padding:20px; overflow:hidden; }
-  h1 { margin:0 0 4px; font-size:clamp(22px,2.2vw,40px); }
+  .panel { background:rgba(27,23,53,.9); border-radius:24px; padding:var(--gap); overflow:hidden; }
+  h1 { margin:0; font-size:clamp(22px,2.2vw,40px); }
   .label { text-transform:uppercase; letter-spacing:.14em; font-size:clamp(11px,.9vw,16px); color:var(--dim); font-weight:700; }
-  .left { display:flex; flex-direction:column; gap:14px; min-height:0; }
-  .join { display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; }
+
+  /* ---- side column: sections stacked with one even gap ----
+     Two spacing sizes only, both scaling with the screen height:
+     --gap between sections, --tight inside a section. */
+  .left { --gap:clamp(14px, 2vh, 24px); --tight:clamp(6px, .8vh, 10px);
+          display:flex; flex-direction:column; gap:var(--gap); min-height:0; }
+  /* join row: the QR (with its label and address) on the left, the two counts stacked on the right */
+  .join { display:grid; grid-template-columns:auto 1fr; gap:var(--gap); align-items:center; }
+  .joinqr { display:flex; flex-direction:column; align-items:center; gap:var(--tight); text-align:center; }
   /* the QR is sized by screen height too, so the column always fits without scrolling */
-  .left #qr { width:min(100%, 26vh); background:#fff; border-radius:18px; padding:8px; }
+  .left #qr { width:clamp(120px, 20vh, 260px); background:#fff; border-radius:18px; padding:8px; }
   #title { text-align:center; }
   .url { font-family:ui-monospace,Menlo,monospace; font-size:clamp(12px,1.1vw,20px); color:var(--accent); word-break:break-all; }
   .clock { color:var(--ink); font-size:clamp(18px,1.8vw,34px); font-weight:800; text-align:center; }
@@ -48,11 +55,12 @@
   .bounce .cap span { display:block; font-size:calc(var(--cw) * .06); color:#555; height:2.4em; overflow:hidden; }
 
   /* ---- right column ---- */
-  .stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; text-align:center; }
-  .stat .n { font-size:clamp(30px,3.2vw,60px); font-weight:900; line-height:1; }
-  .stat.good .n { color:var(--good); } .stat.pics .n { color:var(--accent); }
-  .skipped { text-align:center; color:var(--dim); font-size:clamp(11px,.9vw,16px); }
-  .cats { display:grid; gap:6px; font-size:clamp(13px,1.2vw,22px); }
+  .stats { display:flex; flex-direction:column; gap:var(--gap); text-align:center; }
+  .stat .n { font-size:clamp(30px,3.2vw,60px); font-weight:900; line-height:1; margin-bottom:4px; }
+  .stat.good .n { color:var(--good); }
+  /* "N skipped", under Tasks completed. Keeps its line even when empty, so nothing shifts. */
+  .stat .sub { color:var(--dim); font-size:clamp(11px,.9vw,16px); min-height:1.3em; margin-top:2px; }
+  .cats { display:grid; gap:var(--tight); font-size:clamp(13px,1.2vw,22px); line-height:1.25; }
   .cats b { color:var(--accent); }
   /* the leaderboard takes whatever height is left; extra names are cut off rather than scrolling */
   .boardwrap { flex:1; min-height:0; overflow:hidden;
@@ -60,7 +68,9 @@
                -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
                mask-image:linear-gradient(to bottom, #000 calc(100% - 40px), transparent); }
   .board { list-style:none; margin:0; padding:0; font-size:clamp(15px,1.5vw,28px); }
-  .board li { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.07); }
+  .boardwrap .label { margin-bottom:var(--tight); }
+  .board li { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(255,255,255,.07); }
+  .board li:last-child { border-bottom:none; }
   .board li:first-child { color:var(--accent); font-weight:800; }
 
   /* ---- news-ticker feed along the bottom ---- */
@@ -137,20 +147,20 @@
        the leaderboard and the clock. The rest of the screen is the photo stage. -->
   <section class="panel left">
     <h1 id="title">Party Game</h1>
-    <div class="join">
-      <div class="label">Scan to play</div>
-      <img id="qr" src="/qr/join.png" alt="Join QR code">
-      <div class="url" id="joinurl"></div>
+    <div class="section join">
+      <div class="joinqr">
+        <div class="label">Scan to play</div>
+        <img id="qr" src="/qr/join.png" alt="Join QR code">
+        <div class="url" id="joinurl"></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="n" id="players">0</div><div class="label">Players</div></div>
+        <div class="stat good"><div class="n" id="done">0</div><div class="label">Tasks completed</div><div class="sub" id="skipped"></div></div>
+      </div>
     </div>
-    <div class="stats">
-      <div class="stat"><div class="n" id="players">0</div><div class="label">Players</div></div>
-      <div class="stat good"><div class="n" id="done">0</div><div class="label">Tasks completed</div></div>
-      <div class="stat pics"><div class="n" id="pics">0</div><div class="label">Photos</div></div>
-    </div>
-    <div class="skipped" id="skipped"></div>
-    <div class="cats" id="cats"></div>
-    <div class="boardwrap"><div class="label">Leaderboard</div><ol class="board" id="board"></ol></div>
-    <div class="clock" id="clock"></div>
+    <div class="section cats" id="cats"></div>
+    <div class="section boardwrap"><div class="label">Leaderboard</div><ol class="board" id="board"></ol></div>
+    <div class="section clock" id="clock"></div>
   </section>
 
   <!-- The photo stage. Crispy stands in its bottom-right corner (only while she has a line). -->
@@ -563,7 +573,6 @@ async function tick() {
   $('#joinurl').textContent = d.join_url.replace(/^https?:\/\//, '');
   $('#players').textContent = d.players;
   $('#done').textContent = d.completed;
-  $('#pics').textContent = d.photo_total;
   $('#skipped').textContent = d.declined ? `${d.declined} skipped` : '';
 
   const m = d.minutes_to_midnight;
