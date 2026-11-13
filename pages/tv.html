@@ -95,11 +95,20 @@
   @keyframes fall { to { transform:translateY(112vh) rotate(720deg); } }
 
   /* a newly uploaded photo gets a few seconds full screen */
-  #spotlight { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; background:rgba(8,6,20,.92); z-index:15; }
+  #spotlight { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; background:rgba(8,6,20,.92); z-index:15;
+               transition:background-color .8s ease; }
   #spotlight.show { display:flex; animation:pop .5s ease-out; }
-  #spotlight .slide { transform:rotate(-1.5deg); max-width:70vw; }
+  #spotlight .slide { transform:rotate(-1.5deg); max-width:70vw;
+                      transition:transform .9s cubic-bezier(.55,0,.25,1), opacity .3s ease .65s; }
   #spotlight img { height:68vh; width:auto; max-width:66vw; }
-  #spotlight .label { margin-bottom:16px; font-size:clamp(16px,1.6vw,28px); color:var(--accent); }
+  #spotlight .label { margin-bottom:16px; font-size:clamp(16px,1.6vw,28px); color:var(--accent); transition:opacity .3s; }
+  /* leaving: the backdrop fades away while the big photo flies down onto its bouncing card */
+  #spotlight.leaving { background-color:rgba(8,6,20,0); }
+  #spotlight.leaving > .label { opacity:0; }
+  #spotlight.leaving .slide { opacity:0; }
+  /* a card waiting for its spotlight to finish: invisible, then fades in as the big photo lands */
+  .bounce { transition:opacity .35s ease; }
+  .bounce.waiting { opacity:0; }
 
   /* small join QR in the corner, so late arrivals can still join during a poll */
   #cornerjoin { position:fixed; left:2vw; bottom:2vw; z-index:30; display:none; background:#fff; color:#222; border-radius:16px; padding:10px; text-align:center; font-weight:800; font-size:clamp(12px,1vw,18px); }
@@ -191,6 +200,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   const W = stage.clientWidth, H = stage.clientHeight;
   for (const b of bouncers.values()) {
+    if (b.frozen) continue;     // holding still so the spotlight photo can land on it
     const h = b.el.offsetHeight || cardW * 1.15;
     b.x += b.vx * dt; b.y += b.vy * dt;
     if (b.x < 0) { b.x = 0; b.vx = Math.abs(b.vx); }
@@ -222,10 +232,40 @@ function playSpotlight() {
   const p = spotQueue.shift();
   const el = $('#spotlight');
   spotBusy = true;
+  // Its small bouncing card hides while the big version is on screen, so the
+  // photo is never in two places at once.
+  const b = bouncers.get(p.id);
+  if (b) { b.el.classList.remove('pop'); b.el.classList.add('waiting'); }
+  el.className = '';
   el.innerHTML = `<div class="label">📸 New photo</div>
     <div class="slide"><img src="${esc(p.url)}" alt=""><b>${esc(p.name)}</b><span class="label" style="color:#555">${esc(p.prompt)}</span></div>`;
   el.classList.add('show');
-  setTimeout(() => { el.classList.remove('show'); spotBusy = false; spotEndedAt = Date.now(); }, 5000);
+  setTimeout(() => flyHome(p), 5000);
+}
+
+/* End of a spotlight: shrink the big photo and slide it onto the spot where its
+   card is bouncing, while the dark backdrop fades. When it lands, the real card
+   fades in underneath and carries on bouncing, so it looks like one photo.
+
+   How: measure where the big photo is and where its card is right now (the
+   card holds still meanwhile), then let a CSS transition move and scale the big
+   photo by the difference. */
+function flyHome(p) {
+  const el = $('#spotlight'), slide = el.querySelector('.slide'), b = bouncers.get(p.id);
+  const done = () => {
+    el.classList.remove('show', 'leaving');
+    if (b) { b.frozen = false; b.el.classList.remove('waiting'); }
+    spotBusy = false; spotEndedAt = Date.now();
+  };
+  if (!b || !slide) { done(); return; }    // the host hid this photo in the meantime
+  b.frozen = true;
+  const from = slide.getBoundingClientRect(), to = b.el.getBoundingClientRect();
+  const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
+  const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
+  slide.style.transform = `translate(${dx}px, ${dy}px) scale(${to.width / from.width})`;
+  el.classList.add('leaving');
+  setTimeout(() => b.el.classList.remove('waiting'), 650);   // card appears as the big photo fades
+  setTimeout(done, 1000);
 }
 
 /* ---------------- news-ticker feed ---------------- */
