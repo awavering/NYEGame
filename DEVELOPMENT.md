@@ -45,7 +45,7 @@ That is plenty for 20 to 40 guests and keeps the code easy to follow.
 |---|---|
 | phones | `GET /api/me`, `POST /api/join`, `/api/card/respond`, `/api/card/start`, `/api/card/photo`, `/api/secret`, `/api/flash/claim`, `/api/poll/answer`, `/api/icon/found` |
 | TV | `GET /api/tv`, `GET /api/config` |
-| host | `GET /api/host/data`, `POST /api/host/poll`, `/poll/<close\|clear>`, `/icons/<start\|clear>`, `/flash`, `/finale`, `/photo`, `/reset` |
+| host | `GET /api/host/data`, `GET /api/host/cards` (prompts page), `POST /api/host/poll`, `/poll/<close\|clear>`, `/icons/<start\|clear>`, `/flash`, `/finale`, `/photo`, `/reset` |
 
 Host calls need the key (`?key=` or an `X-Host-Key` header).
 

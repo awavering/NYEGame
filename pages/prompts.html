@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prompts</title>
+<style>
+  :root { --bg:#12101f; --card:#1f1b36; --well:#14112a; --line:#2c2750; --ink:#f4f1ff; --dim:#a9a3c9;
+          --accent:#ffcc33; --good:#3ddc97; --bad:#ff6b81; --chip:#3a3562; }
+  * { box-sizing:border-box; }
+  body { font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--ink); margin:0 auto; padding:16px; max-width:900px; }
+  h1 { margin:0 0 4px; }
+  h2 { margin:24px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:.12em; color:var(--accent); }
+  a { color:var(--accent); }
+  .dim { color:var(--dim); }
+  .top { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:baseline; margin-bottom:12px; }
+  input { width:100%; font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid var(--chip); background:var(--well); color:var(--ink); }
+  .card { background:var(--card); border-radius:14px; padding:14px 16px; margin-bottom:10px; display:grid; grid-template-columns:1fr auto; gap:4px 16px; }
+  .prompt { font-size:18px; font-weight:700; line-height:1.3; }
+  .hint { color:var(--dim); font-size:14px; }
+  .pts { font-size:22px; font-weight:900; color:var(--accent); text-align:right; white-space:nowrap; }
+  .pts small { font-size:12px; color:var(--dim); font-weight:700; display:block; }
+  .chips { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .chip { background:var(--chip); border-radius:999px; padding:3px 10px; font-size:13px; }
+  .chip.flag { background:var(--accent); color:#222; font-weight:700; }
+  .chip.secret { background:var(--well); border:1px dashed var(--accent); font-family:ui-monospace,Menlo,monospace; }
+  .details { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:4px 18px; font-size:13px; color:var(--dim); margin-top:4px; }
+  .details b { color:var(--ink); font-weight:600; }
+  .now { color:var(--good) !important; }
+  .stats { grid-column:1 / -1; font-size:13px; border-top:1px solid var(--line); padding-top:8px; margin-top:6px; }
+  .stats .bad { color:var(--bad); }
+  .sprite { image-rendering:pixelated; height:32px; vertical-align:middle; }
+  .empty { padding:24px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Prompts</h1>
+  <span class="dim" id="summary"></span>
+  <a id="hostlink">← Host controls</a>
+</div>
+<input id="search" type="search" placeholder="Filter by prompt, category, type or id" autocomplete="off">
+<div id="list"></div>
+
+<script>
+/* ---------------------------------------------------------------
+   Prompts page (host only). Lists every card in cards.json with its
+   settings, and how it has gone tonight (dealt / done / skipped).
+   It re-reads every 10 seconds, so edits to cards.json show up here
+   without reloading.
+   --------------------------------------------------------------- */
+const key = new URLSearchParams(location.search).get('key') || '';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Plain-English names for the card types (cards.json "type").
+const TYPES = {
+  confirm: 'Done button', text: 'Text answer', number: 'Number answer', photo: 'Photo', draw: 'Drawing',
+  secret_qr: 'Secret QR', timer: 'Timer', gforce: 'G-force', light: 'Brightest light',
+};
+const CAMERAS = { user: 'selfie camera', environment: 'back camera', library: 'camera roll' };
+const GRADES = { minutes_to_midnight: 'graded: minutes to midnight (+2 within 10 min)', scoreboard_number: 'graded: scoreboard number (+1 within 2)' };
+
+let data = null;
+
+async function load() {
+  const r = await fetch('/api/host/cards', { headers: { 'X-Host-Key': key } });
+  if (!r.ok) { $('#list').innerHTML = '<p class="empty">Wrong or missing key. Open this page with ?key=YOURKEY</p>'; return; }
+  data = await r.json();
+  draw();
+}
+
+/* Show the prompt the way guests see it: {albert_handle} filled in, and {thing}
+   (on drawing cards) explained, since each guest gets a random thing to draw. */
+function promptText(c) {
+  let t = esc(c.prompt).replace(/\{albert_handle\}/g, esc(data.albert_handle));
+  if (c.prompt.includes('{thing}')) t = t.replace(/\{thing\}/g, `<span class="dim">[one of ${data.draw_things.length} things]</span>`);
+  return t;
+}
+
+function cardHtml(c) {
+  const chips = [`<span class="chip">${esc(TYPES[c.type] || c.type)}</span>`];
+  if (c.starter) chips.push('<span class="chip flag">Starter</span>');
+  if (c.once) chips.push('<span class="chip flag">Once only</span>');
+  if (c.mascot_caption) chips.push('<span class="chip flag">Crispy\'s line</span>');
+  if (c.type === 'secret_qr') chips.push(`<span class="chip secret">code ${esc(c.code)}</span>`);
+  if (c.image) chips.push(`<span class="chip"><img class="sprite" src="/assets/${esc(c.image)}" alt=""> ${esc(c.image)}</span>`);
+
+  const details = [`<span>id <b>${esc(c.id)}</b></span>`];
+  if (c.camera && ['photo', 'light'].includes(c.type)) details.push(`<span>${esc(CAMERAS[c.camera] || c.camera)}</span>`);
+  if (c.type === 'timer') details.push(`<span><b>${esc(c.minutes)}</b> minutes</span>`);
+  if (c.location) details.push(`<span>hidden: <b>${esc(c.location)}</b></span>`);
+  if (c.placeholder) details.push(`<span>box says “${esc(c.placeholder)}”</span>`);
+  if (c.grade) details.push(`<span>${esc(GRADES[c.grade] || c.grade)}</span>`);
+  // How likely the card is in each part of the night (1 = normal, 0 = never). Now is highlighted.
+  const w = c.weights || {};
+  details.push('<span>weights ' + ['early', 'mid', 'late'].map(p =>
+    `<span class="${p === data.phase ? 'now' : ''}">${p} <b class="${p === data.phase ? 'now' : ''}">${w[p] ?? 1}</b></span>`).join(' · ') + '</span>');
+
+  const resolved = c.done + c.skipped;
+  const skipPct = resolved ? Math.round(100 * c.skipped / resolved) : 0;
+  const stats = c.dealt
+    ? `Dealt <b>${c.dealt}</b> · done <b>${c.done}</b> · <span class="${skipPct >= 50 ? 'bad' : ''}">skipped <b>${c.skipped}</b>${resolved ? ` (${skipPct}%)` : ''}</span>`
+    : '<span class="dim">Not dealt yet tonight</span>';
+
+  return `<div class="card">
+    <div><div class="prompt">${promptText(c)}</div>${c.hint ? `<div class="hint">${esc(c.hint)}</div>` : ''}</div>
+    <div class="pts">${esc(c.points)}<small>pt${c.points === 1 ? '' : 's'}</small></div>
+    <div class="chips">${chips.join('')}</div>
+    <div class="details">${details.join('')}</div>
+    <div class="stats">${stats}</div>
+  </div>`;
+}
+
+function draw() {
+  if (!data) return;
+  const q = $('#search').value.trim().toLowerCase();
+  const match = (c) => !q || [c.prompt, c.hint, c.category, c.type, TYPES[c.type], c.id].some(v => String(v || '').toLowerCase().includes(q));
+  const shown = data.cards.filter(match);
+  $('#summary').textContent = `${data.cards.length} cards · now: ${data.phase} of the night`;
+
+  // Group by category, in the order categories first appear in cards.json.
+  const groups = new Map();
+  for (const c of shown) { if (!groups.has(c.category)) groups.set(c.category, []); groups.get(c.category).push(c); }
+  $('#list').innerHTML = [...groups].map(([cat, cards]) =>
+    `<h2>${esc(cat)} <span class="dim">(${cards.length})</span></h2>${cards.map(cardHtml).join('')}`).join('')
+    || '<p class="empty dim">No cards match.</p>';
+}
+
+$('#search').oninput = draw;
+$('#hostlink').href = '/host?key=' + encodeURIComponent(key);
+load(); setInterval(load, 10000);
+</script>
+</body>
+</html>

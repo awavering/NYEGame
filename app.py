@@ -424,6 +424,13 @@ def host_print():
     return send_from_directory(PAGES, "print.html")
 
 
+@app.get("/prompts")
+def prompts_page():
+    # Host only: it lists every card, including the secret QR codes.
+    check_host()
+    return send_from_directory(PAGES, "prompts.html")
+
+
 @app.get("/s/<code>")
 def secret_page(code):
     return send_from_directory(PAGES, "claim.html")
@@ -1008,6 +1015,40 @@ def host_data():
                 ],
                 "phase": current_phase(),
                 "minutes_to_midnight": round(hours_to_midnight() * 60),
+            }
+        )
+
+
+@app.get("/api/host/cards")
+def host_cards():
+    """Every card in cards.json, as written, plus how it has gone tonight
+    (dealt / done / skipped), for the prompts page."""
+    check_host()
+    with lock:
+        data = load_cards()
+        results = {}
+        for h in state["history"]:
+            if h["card_id"] and h["result"] in ("done", "declined"):
+                counts = results.setdefault(h["card_id"], {"done": 0, "declined": 0})
+                counts[h["result"]] += 1
+        cards = []
+        for c in data["cards"]:
+            counts = results.get(c["id"], {"done": 0, "declined": 0})
+            cards.append(
+                {
+                    **c,
+                    "points": c.get("points", 1),
+                    "dealt": state["assigned"].get(c["id"], 0),
+                    "done": counts["done"],
+                    "skipped": counts["declined"],
+                }
+            )
+        return jsonify(
+            {
+                "cards": cards,
+                "draw_things": data.get("draw_things", []),
+                "albert_handle": settings().get("albert_handle", ""),
+                "phase": current_phase(),
             }
         )
 

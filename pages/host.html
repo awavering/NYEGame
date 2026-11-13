@@ -20,7 +20,7 @@
 </style>
 </head>
 <body>
-<h1>Host controls</h1>
+<div class="row" style="justify-content:space-between"><h1>Host controls</h1><a id="promptslinktop" style="color:#ffcc33">All prompts →</a></div>
 <div class="dim-t" id="status"></div><div class="msg" id="msg"></div>
 
 <section>
@@ -72,6 +72,7 @@
 
 <section>
   <h2>Setup</h2>
+  <div class="row"><a id="promptslink" style="color:#ffcc33" target="_blank">See all prompts (cards, points, stats)</a></div>
   <div class="row"><a id="printlink" style="color:#ffcc33" target="_blank">Print the secret QR codes</a></div>
   <div class="row"><button class="red" id="reset">Reset everything (new game)</button></div>
 </section>
@@ -145,6 +146,7 @@ $('#finale').onclick = () => { if (confirm('Show the Happy New Year finale now?'
 $('#finaleoff').onclick = () => call('/api/host/finale', { on: false });
 $('#reset').onclick = () => { if (confirm('Wipe all players, scores and photos?')) call('/api/host/reset'); };
 $('#printlink').href = '/host/print?key=' + encodeURIComponent(key);
+$('#promptslink').href = $('#promptslinktop').href = '/prompts?key=' + encodeURIComponent(key);
 
 load(); setInterval(load, 4000);
 </script>
