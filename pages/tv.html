@@ -10,26 +10,33 @@
   * { box-sizing:border-box; }
   html, body { height:100%; margin:0; overflow:hidden; }
   body { background:radial-gradient(circle at 50% 0%, #26204d 0%, var(--bg) 60%); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
-  #layout { display:grid; grid-template-columns:minmax(300px,24vw) 1fr minmax(320px,26vw); grid-template-rows:1fr auto; height:100vh; gap:16px; padding:16px; }
+  #layout { display:grid; grid-template-columns:minmax(320px,26vw) 1fr; grid-template-rows:minmax(0,1fr) auto; height:100vh; gap:16px; padding:16px; }
   .panel { background:rgba(27,23,53,.9); border-radius:24px; padding:20px; overflow:hidden; }
   h1 { margin:0 0 4px; font-size:clamp(22px,2.2vw,40px); }
   .label { text-transform:uppercase; letter-spacing:.14em; font-size:clamp(11px,.9vw,16px); color:var(--dim); font-weight:700; }
-  .left { display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; }
-  .left #qr { width:100%; max-width:340px; background:#fff; border-radius:18px; padding:8px; }
+  .left { display:flex; flex-direction:column; gap:14px; min-height:0; }
+  .join { display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; }
+  /* the QR is sized by screen height too, so the column always fits without scrolling */
+  .left #qr { width:min(100%, 26vh); background:#fff; border-radius:18px; padding:8px; }
+  #title { text-align:center; }
   .url { font-family:ui-monospace,Menlo,monospace; font-size:clamp(12px,1.1vw,20px); color:var(--accent); word-break:break-all; }
-  .count { font-size:clamp(36px,4vw,72px); font-weight:900; line-height:1; }
-  .clock { margin-top:auto; color:var(--ink); font-size:clamp(18px,1.8vw,34px); font-weight:800; }
+  .clock { color:var(--ink); font-size:clamp(18px,1.8vw,34px); font-weight:800; text-align:center; }
   /* mascot: a pixel-art sprite that only appears while someone's caption for it is
-     current. --px (set by script) is the whole-number scale shared by the dog and his
+     current. --px (set by script) is the whole-number scale shared by the dog and her
      speech bubble, so their pixels are the same size. */
-  #mascot { flex:1; min-height:0; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; visibility:hidden; }
+  /* Crispy's corner of the photo stage: up to half its width and 70% of its height. She stands
+     in front of the bouncing photos (z-index) and lets taps/clicks pass through. */
+  #mascot { position:absolute; right:2%; bottom:2%; width:46%; height:70%; z-index:3; pointer-events:none;
+            display:flex; flex-direction:column; align-items:center; justify-content:flex-end; visibility:hidden; }
   #mascot.on { visibility:visible; animation:pop .5s ease-out; }
   #dog { display:block; image-rendering:pixelated; --px:1; animation:bob 1.6s steps(1,end) infinite; }
   @keyframes bob { 0% { transform:translateY(0); } 50% { transform:translateY(calc(var(--px) * -1px)); } }
   #dog.hop { animation:hop .7s steps(1,end) 1; }
   @keyframes hop { 0% { transform:translateY(0); } 15% { transform:translateY(calc(var(--px) * -5px)); } 35% { transform:translateY(calc(var(--px) * -8px)); } 55% { transform:translateY(calc(var(--px) * -5px)); } 75% { transform:translateY(calc(var(--px) * -1px)); } 100% { transform:translateY(0); } }
   #bubble { display:block; image-rendering:pixelated; margin-bottom:calc(var(--px, 3) * 2px); }   /* a canvas: see drawBubble() */
-  #byline { color:var(--dim); font-size:clamp(11px,.9vw,16px); margin-top:6px; }
+  /* who wrote the line: a dark pill so it stays readable whatever is behind it */
+  #byline { color:var(--ink); background:rgba(14,12,29,.88); font-weight:700; font-size:clamp(14px,1.2vw,22px);
+            padding:4px 14px; border-radius:999px; margin-top:6px; }
 
   /* ---- bouncing photos (big enough to see from the couch) ---- */
   #stage { position:relative; overflow:hidden; border-radius:24px; border:2px dashed rgba(255,255,255,.08); }
@@ -41,13 +48,17 @@
   .bounce .cap span { display:block; font-size:calc(var(--cw) * .06); color:#555; height:2.4em; overflow:hidden; }
 
   /* ---- right column ---- */
-  .right { display:flex; flex-direction:column; gap:14px; }
-  .stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; text-align:center; }
-  .stat .n { font-size:clamp(34px,3.6vw,66px); font-weight:900; line-height:1; }
+  .stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; text-align:center; }
+  .stat .n { font-size:clamp(30px,3.2vw,60px); font-weight:900; line-height:1; }
   .stat.good .n { color:var(--good); } .stat.pics .n { color:var(--accent); }
   .skipped { text-align:center; color:var(--dim); font-size:clamp(11px,.9vw,16px); }
   .cats { display:grid; gap:6px; font-size:clamp(13px,1.2vw,22px); }
   .cats b { color:var(--accent); }
+  /* the leaderboard takes whatever height is left; extra names are cut off rather than scrolling */
+  .boardwrap { flex:1; min-height:0; overflow:hidden;
+               /* fade the bottom edge, so a name cut off by the clock fades out instead of being sliced */
+               -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+               mask-image:linear-gradient(to bottom, #000 calc(100% - 40px), transparent); }
   .board { list-style:none; margin:0; padding:0; font-size:clamp(15px,1.5vw,28px); }
   .board li { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.07); }
   .board li:first-child { color:var(--accent); font-weight:800; }
@@ -122,26 +133,30 @@
 </head>
 <body>
 <div id="layout">
+  <!-- One side column with everything that isn't photos: how to join, the numbers,
+       the leaderboard and the clock. The rest of the screen is the photo stage. -->
   <section class="panel left">
     <h1 id="title">Party Game</h1>
-    <div class="label">Scan to play</div>
-    <img id="qr" src="/qr/join.png" alt="Join QR code">
-    <div class="url" id="joinurl"></div>
-    <div><div class="count" id="players">0</div><div class="label">players</div></div>
-    <div id="mascot"><canvas id="bubble"></canvas><img id="dog" alt=""><div id="byline"></div></div>
-    <div class="clock" id="clock"></div>
-  </section>
-
-  <section id="stage"><div class="empty" id="empty">Scan the QR code to join.<br>Photos you take will bounce around here.</div></section>
-
-  <section class="panel right">
+    <div class="join">
+      <div class="label">Scan to play</div>
+      <img id="qr" src="/qr/join.png" alt="Join QR code">
+      <div class="url" id="joinurl"></div>
+    </div>
     <div class="stats">
+      <div class="stat"><div class="n" id="players">0</div><div class="label">Players</div></div>
       <div class="stat good"><div class="n" id="done">0</div><div class="label">Tasks completed</div></div>
       <div class="stat pics"><div class="n" id="pics">0</div><div class="label">Photos</div></div>
     </div>
     <div class="skipped" id="skipped"></div>
     <div class="cats" id="cats"></div>
-    <div><div class="label">Leaderboard</div><ol class="board" id="board" style="padding-left:0"></ol></div>
+    <div class="boardwrap"><div class="label">Leaderboard</div><ol class="board" id="board"></ol></div>
+    <div class="clock" id="clock"></div>
+  </section>
+
+  <!-- The photo stage. Crispy stands in its bottom-right corner (only while she has a line). -->
+  <section id="stage">
+    <div class="empty" id="empty">Scan the QR code to join.<br>Photos you take will bounce around here.</div>
+    <div id="mascot"><canvas id="bubble"></canvas><img id="dog" alt=""><div id="byline"></div></div>
   </section>
 
   <div id="feed"></div>
@@ -492,6 +507,7 @@ function fitMascot() {
   }
   mascot.classList.remove('on');
 }
+
 function showMascot(url) { dog.onload = fitMascot; dog.src = url; }
 window.addEventListener('resize', fitMascot);
 dog.addEventListener('animationend', (e) => { if (e.animationName === 'hop') dog.classList.remove('hop'); });
