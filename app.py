@@ -66,6 +66,8 @@ TZ = ZoneInfo(os.environ.get("TZ_NAME", "America/Denver"))
 MIDNIGHT_ISO = os.environ.get("MIDNIGHT_ISO")
 # How long a closed poll's results stay on the TV before it goes back to normal.
 POLL_RESULTS_SECONDS = 20
+# How long a flash QR stays on the TV unless the host picks another time.
+FLASH_SECONDS = 15
 # How many old polls the host page remembers.
 POLL_LOG_SIZE = 50
 # How long the mascot stays on the TV saying a guest's caption (a newer caption replaces it sooner).
@@ -913,7 +915,9 @@ def api_tv():
             flash = {
                 "token": fl["token"],
                 "remaining": round(fl["until"] - time.time()),
-                "total": fl.get("seconds", 60),
+                # exact seconds left, so the TV's timer bar can slide smoothly to the end
+                "ends_in": round(fl["until"] - time.time(), 2),
+                "total": fl.get("seconds", FLASH_SECONDS),
                 "bonus": fl["bonus"],
                 "claimed": len(fl["claimed"]),
             }
@@ -1102,7 +1106,7 @@ def host_flash():
     check_host()
     data = request.get_json(silent=True) or {}
     try:
-        seconds = max(10, min(int(data.get("seconds", 60)), 600))
+        seconds = max(10, min(int(data.get("seconds", FLASH_SECONDS)), 600))
         bonus = max(1, min(int(data.get("bonus", 3)), 20))
     except (TypeError, ValueError):
         return jsonify({"error": "Seconds and points must be numbers."}), 400

@@ -645,3 +645,10 @@ def test_skipping_or_other_cards_dont_make_crispy_talk(client, make_player):
     ann.give("intro")
     ann.respond("intro", answer="Maria")
     assert client.get("/api/tv").get_json()["mascot_line"] is None
+
+
+def test_flash_qr_lasts_15_seconds_by_default(client, host):
+    client.post("/api/host/flash", json={}, headers=host)
+    flash = client.get("/api/tv").get_json()["flash"]
+    assert flash["total"] == 15
+    assert 14 < flash["ends_in"] <= 15  # exact time left, for the TV's smooth timer bar
