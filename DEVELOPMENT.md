@@ -124,6 +124,30 @@ several threads, for example `gunicorn -w 1 --threads 8 app:app`. If the host
 wipes its disk on restart, point `GAME_DATA_DIR` at a persistent disk. Set
 `BASE_URL` to the public https address so the QR codes use it.
 
+### Render
+
+The **start command** must keep a server running on Render's `$PORT`. Render
+installs `requirements.txt` by itself first (its default build step), which
+includes gunicorn.
+
+| Render setting | Value |
+|---|---|
+| Start command | `gunicorn -w 1 --threads 8 --bind 0.0.0.0:$PORT app:app` |
+| Environment | `PYTHON_VERSION` = `3.12` (what CI tests). `HOST_KEY` is optional (default `albert`) |
+| Instances | exactly 1 (never scale up or autoscale: see above) |
+
+If your service has no build step, put `pip install -r requirements.txt && `
+in front of the start command. Don't run `make setup` or `make check` there:
+setup builds a separate `.venv` that gunicorn never uses, and a command that
+finishes (like the checks) means "the server stopped", so the deploy fails.
+The checks already run on GitHub for every PR (`.github/workflows/ci.yml`).
+`BASE_URL` isn't needed: the app reads Render's proxy headers and builds https
+QR links on its own.
+
+Render's disk is wiped on every deploy and restart, and free instances restart
+after 15 idle minutes. Without a persistent disk mounted at `GAME_DATA_DIR`,
+scores and photos vanish on restart. Don't deploy during the party.
+
 ## Known limits and ideas
 
 - **Polling, not push.** A 1 to 2 second lag. If it ever bothers you, Server-Sent Events are the smallest upgrade.
