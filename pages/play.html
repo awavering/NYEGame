@@ -7,8 +7,7 @@
 <style>
   :root { --bg:#12101f; --card:#1f1b36; --ink:#f4f1ff; --dim:#a9a3c9; --accent:#ffcc33; --good:#3ddc97; --bad:#ff6b81;
           /* Spacing scale: every gap on this page is one of these, so things line up.
-             Rule of thumb: --s3 between stacked things in a card, --s2 to tuck a small
-             label against what it labels, --s4 before a new group (and the page edge). */
+             Inside a card, everything is --s3 apart (see .stack below). */
           --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; min-height:100vh; }
@@ -17,29 +16,36 @@
   header .who { font-weight:700; font-size:18px; }
   header .pts { background:var(--accent); color:#222; font-weight:800; padding:var(--s1) var(--s3); border-radius:999px; }
   .card { background:var(--card); border-radius:20px; padding:var(--s5); box-shadow:0 8px 30px rgba(0,0,0,.35); }
-  .card > :last-child { margin-bottom:0; }   /* the card's own padding is the space at the bottom */
-  .cat { text-transform:uppercase; letter-spacing:.12em; font-size:12px; color:var(--accent); font-weight:700; margin-bottom:var(--s2); }
-  h1 { margin:0 0 var(--s3); font-size:30px; }
-  h2 { margin:0 0 var(--s3); font-size:24px; line-height:1.25; }
-  p { margin:0; }                         /* no browser-default paragraph gaps; spacing comes from the rules here */
-  .hint { color:var(--dim); margin-bottom:var(--s4); }
-  input[type=text], input[type=number] { width:100%; padding:var(--s3) var(--s4); font-size:18px; border-radius:12px; border:2px solid #3a3562; background:#14112a; color:var(--ink); margin:0 0 var(--s3); }
-  button { font-size:18px; border:none; border-radius:12px; padding:var(--s3) var(--s4); cursor:pointer; font-weight:700; }
-  button.big { width:100%; background:var(--good); color:#08261a; margin-bottom:var(--s3); }
-  button.alt { width:100%; background:#3a3562; color:var(--ink); margin-bottom:var(--s3); }
-  button.skip { background:transparent; color:var(--dim); font-size:15px; padding:var(--s1) var(--s2) var(--s2); width:100%; }
+  /* Equal spacing: a card, its #body, its forms and the poll options each stack their
+     contents in a column with the same --s3 gap between every visible item. Nothing
+     inside has its own margins, and hidden things (like an empty error line) leave
+     no gap at all. */
+  .card, #body, .card form, .opts { display:flex; flex-direction:column; gap:var(--s3); }
+  .cat { text-transform:uppercase; letter-spacing:.12em; font-size:12px; color:var(--accent); font-weight:700; }
+  h1, h2, p { margin:0; }                 /* no browser-default gaps; the stack's gap does the spacing */
+  h1 { font-size:30px; }
+  h2 { font-size:24px; line-height:1.25; }
+  .hint { color:var(--dim); }
+  input[type=text], input[type=number] { width:100%; padding:var(--s3) var(--s4); font-size:18px; border-radius:12px; border:2px solid #3a3562; background:#14112a; color:var(--ink); margin:0; }
+  button { font-size:18px; border:none; border-radius:12px; padding:var(--s3) var(--s4); cursor:pointer; font-weight:700; margin:0; }
+  button.big { width:100%; background:var(--good); color:#08261a; }
+  button.alt { width:100%; background:#3a3562; color:var(--ink); }
+  /* Skip: a roomy tap area, pulled up and down by its own padding so the words
+     themselves sit the usual --s3 below the button above (and the card ends evenly). */
+  button.skip { background:transparent; color:var(--dim); font-size:15px; padding:var(--s2); margin:calc(-1 * var(--s2)) 0; width:100%; }
   button:disabled { opacity:.45; }
-  /* Error line: keeps its height when empty so the Skip button doesn't jump when an error appears. */
-  .msg { color:var(--bad); min-height:20px; }
+  /* Error line: takes no space until there is an error to show. */
+  .msg { color:var(--bad); }
+  .msg:empty { display:none; }
   .toast { position:fixed; left:50%; top:var(--s4); transform:translateX(-50%); background:var(--good); color:#06281b; font-weight:800; padding:var(--s3) var(--s4); border-radius:12px; z-index:50; max-width:90%; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.4); }
-  canvas#pad { display:block; width:100%; aspect-ratio:1/1; background:#fff; border-radius:12px; touch-action:none; margin-bottom:var(--s3); }
-  video#cam { display:block; width:100%; border-radius:12px; background:#000; margin-bottom:var(--s3); }
-  .sprite { display:block; margin:0 auto var(--s3); image-rendering:pixelated; }
-  .big-num { font-size:56px; font-weight:900; text-align:center; line-height:1.1; margin-bottom:var(--s3); }
+  canvas#pad { display:block; width:100%; aspect-ratio:1/1; background:#fff; border-radius:12px; touch-action:none; }
+  video#cam { display:block; width:100%; border-radius:12px; background:#000; }
+  .sprite { display:block; align-self:center; image-rendering:pixelated; }
+  .big-num { font-size:56px; font-weight:900; text-align:center; line-height:1.1; }
   .modal { position:fixed; inset:0; background:rgba(10,8,25,.92); display:flex; align-items:center; justify-content:center; padding:var(--s4); z-index:40; }
   .modal .card { width:100%; max-width:480px; text-align:center; }
-  .emoji { font-size:120px; line-height:1.1; margin-bottom:var(--s2); }
-  .opts button { width:100%; margin-bottom:var(--s3); background:#3a3562; color:var(--ink); }
+  .emoji { font-size:120px; line-height:1.1; }
+  .opts button { width:100%; background:#3a3562; color:var(--ink); }
   .small { color:var(--dim); font-size:14px; }
 </style>
 </head>
