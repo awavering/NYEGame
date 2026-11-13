@@ -1,7 +1,8 @@
 {
   "settings": {
     "party_name": "New Year's Eve 2026",
-    "albert_handle": "@albert-venmo (edit me in cards.json)",
+    "mascot": "dog.png",
+    "albert_handle": "@albert-wavering",
     "approve_photos": false,
     "tv_photo_limit": 8,
     "skip_wait_seconds": 20
@@ -33,8 +34,10 @@
       "prompt": "Take a selfie with someone and upload it",
       "hint": "Whoever is standing closest to you!" },
 
-    { "id": "crusty", "category": "Photos", "type": "photo", "camera": "environment", "points": 3,
-      "prompt": "Find and take a picture of Crusty the dog" },
+    { "id": "crispy", "category": "Photos", "type": "photo", "camera": "environment", "points": 3,
+      "image": "dog.png",
+      "prompt": "Find and take a picture of Crispy the dog",
+      "hint": "That's him on the screen. Now find the real one!" },
 
     { "id": "intro", "category": "Social", "type": "text", "points": 1, "starter": true,
       "prompt": "Introduce yourself to someone new. What's their name?",

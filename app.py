@@ -4,7 +4,7 @@ NYE party game server.
 Run it:   python app.py
 TV:       http://<your-ip>:5000/tv
 Phones:   scan the QR code on the TV (goes to /play)
-Host:     http://<your-ip>:5000/host?key=host     (change the key with HOST_KEY)
+Host:     http://<your-ip>:5000/host?key=albert   (change the key with HOST_KEY)
 
 Everything that guests see is driven by cards.json. State is saved to
 state.json after every change, so a restart does not lose the game.
@@ -49,6 +49,7 @@ from tools.check_cards import validate as validate_cards
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 PAGES = os.path.join(BASE, "pages")
+ASSETS = os.path.join(PAGES, "assets")  # pictures (sprites) the pages can show
 # Everything the game writes while running (state.json, uploads/) goes in
 # DATA_DIR. Override with GAME_DATA_DIR; the tests point it at a temp folder
 # so they can never touch a real game.
@@ -58,7 +59,7 @@ STATE_FILE = os.path.join(DATA_DIR, "state.json")
 CARDS_FILE = os.environ.get("CARDS_FILE", os.path.join(BASE, "cards.json"))
 os.makedirs(UPLOADS, exist_ok=True)
 
-HOST_KEY = os.environ.get("HOST_KEY", "host")
+HOST_KEY = os.environ.get("HOST_KEY", "albert")
 PORT = int(os.environ.get("PORT", "5000"))
 TZ = ZoneInfo(os.environ.get("TZ_NAME", "America/Denver"))
 # For testing you can fake the countdown, e.g. MIDNIGHT_ISO=2026-10-16T00:00:00
@@ -115,7 +116,7 @@ def load_cards():
         try:
             with open(CARDS_FILE, encoding="utf-8") as f:
                 data = json.load(f)
-            errors, warnings = validate_cards(data)
+            errors, warnings = validate_cards(data, assets_dir=ASSETS)
         except (OSError, ValueError) as exc:  # includes JSON syntax errors
             data, errors, warnings = None, [f"could not read cards.json: {exc}"], []
         if errors:
@@ -307,6 +308,8 @@ def public_card(p):
         out["ready_at"] = cur["started_at"] + card["minutes"] * 60
     if card["type"] == "secret_qr":
         out["location"] = card.get("location", "")
+    if card.get("image"):
+        out["image"] = "/assets/" + card["image"]
     return out
 
 
@@ -431,9 +434,20 @@ def photo_file(name):
     return send_from_directory(UPLOADS, name)
 
 
+@app.get("/assets/<path:name>")
+def asset_file(name):
+    return send_from_directory(ASSETS, name)  # refuses paths that climb out of the folder
+
+
 @app.get("/api/config")
 def api_config():
-    return jsonify({"party_name": settings().get("party_name", "Party Game")})
+    mascot = settings().get("mascot")
+    return jsonify(
+        {
+            "party_name": settings().get("party_name", "Party Game"),
+            "mascot": f"/assets/{mascot}" if mascot else None,
+        }
+    )
 
 
 def check_host():

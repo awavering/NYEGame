@@ -19,6 +19,15 @@
   .url { font-family:ui-monospace,Menlo,monospace; font-size:clamp(12px,1.1vw,20px); color:var(--accent); word-break:break-all; }
   .count { font-size:clamp(36px,4vw,72px); font-weight:900; line-height:1; }
   .clock { margin-top:auto; color:var(--ink); font-size:clamp(18px,1.8vw,34px); font-weight:800; }
+  /* mascot: a pixel-art sprite; --px (set by script) is its whole-number scale */
+  #mascot { flex:1; min-height:0; width:100%; display:flex; align-items:flex-end; justify-content:center; position:relative; visibility:hidden; }
+  #mascot.on { visibility:visible; }
+  #dog { display:block; image-rendering:pixelated; --px:1; animation:bob 1.6s steps(1,end) infinite; }
+  @keyframes bob { 0% { transform:translateY(0); } 50% { transform:translateY(calc(var(--px) * -1px)); } }
+  #dog.hop { animation:hop .7s steps(1,end) 1; }
+  @keyframes hop { 0% { transform:translateY(0); } 15% { transform:translateY(calc(var(--px) * -5px)); } 35% { transform:translateY(calc(var(--px) * -8px)); } 55% { transform:translateY(calc(var(--px) * -5px)); } 75% { transform:translateY(calc(var(--px) * -1px)); } 100% { transform:translateY(0); } }
+  #bubble { position:absolute; top:0; left:50%; transform:translateX(-50%); background:#fff; color:#222; font-weight:700; padding:8px 14px; border-radius:14px; font-size:clamp(14px,1.3vw,24px); text-align:center; opacity:0; transition:opacity .2s; max-width:100%; }
+  #bubble.show { opacity:1; }
 
   /* ---- bouncing photos (big enough to see from the couch) ---- */
   #stage { position:relative; overflow:hidden; border-radius:24px; border:2px dashed rgba(255,255,255,.08); }
@@ -108,6 +117,7 @@
     <img id="qr" src="/qr/join.png" alt="Join QR code">
     <div class="url" id="joinurl"></div>
     <div><div class="count" id="players">0</div><div class="label">players</div></div>
+    <div id="mascot"><div id="bubble"></div><img id="dog" alt=""></div>
     <div class="clock" id="clock"></div>
   </section>
 
@@ -347,6 +357,38 @@ function chooseOverlay(d) {
   return { key: '', html: '' };
 }
 
+/* ---------------- mascot ----------------
+   A pixel-art sprite in the left panel (set settings.mascot in cards.json). It is drawn at a
+   whole-number multiple of its real size so the pixels stay sharp, bobs gently, and hops with a
+   speech bubble whenever someone completes (or skips) a task. */
+const mascot = $('#mascot'), dog = $('#dog'), bubble = $('#bubble');
+let bubbleTimer = null, lastTotal = null;
+
+function fitMascot() {
+  if (!dog.naturalWidth) return;
+  const k = Math.floor(Math.min(mascot.clientWidth / dog.naturalWidth, (mascot.clientHeight - 56) / dog.naturalHeight));
+  mascot.classList.toggle('on', k >= 2);              // too little room: hide it rather than squash it
+  if (k >= 2) { dog.style.width = dog.naturalWidth * k + 'px'; dog.style.setProperty('--px', k); }
+}
+function showMascot(url) { dog.onload = fitMascot; dog.src = url; }
+window.addEventListener('resize', fitMascot);
+dog.addEventListener('animationend', (e) => { if (e.animationName === 'hop') dog.classList.remove('hop'); });
+
+function say(text) {
+  bubble.textContent = text; bubble.classList.add('show');
+  clearTimeout(bubbleTimer); bubbleTimer = setTimeout(() => bubble.classList.remove('show'), 3000);
+}
+function mascotReacts(ev) {
+  if (!mascot.classList.contains('on')) return;
+  if (ev.result === 'done') {
+    const lines = [`Nice one, ${ev.name}!`, `Woof! Go ${ev.name}!`, `Good job, ${ev.name}!`, `${ev.name} did it!`];
+    say(lines[Math.floor(Math.random() * lines.length)]);
+    dog.classList.remove('hop'); void dog.offsetWidth; dog.classList.add('hop');   // restart the hop
+  } else if (ev.result === 'declined') {
+    say(`Aww, ${ev.name} skipped...`);
+  }
+}
+
 /* ---------------- main refresh ---------------- */
 let lastOverlay = null;
 async function tick() {
@@ -375,6 +417,10 @@ async function tick() {
   drawFeed(d.feed);
   syncPhotos(d.photos);
 
+  const total = d.completed + d.declined;         // react only to new events, not the ones already there at page load
+  if (lastTotal !== null && total > lastTotal && d.feed.length) mascotReacts(d.feed[0]);
+  lastTotal = total;
+
   const o = chooseOverlay(d);
   if (o.key !== lastOverlay) {
     lastOverlay = o.key;
@@ -386,7 +432,7 @@ async function tick() {
   $('#cornerjoin').classList.toggle('show', !!o.corner);
   playSpotlight();   // in case one was waiting for an overlay to finish
 }
-fetch('/api/config').then(r => r.json()).then(c => { $('#title').textContent = c.party_name; document.title = c.party_name; });
+fetch('/api/config').then(r => r.json()).then(c => { $('#title').textContent = c.party_name; document.title = c.party_name; if (c.mascot) showMascot(c.mascot); });
 tick(); setInterval(tick, 1500);
 </script>
 </body>

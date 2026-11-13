@@ -56,6 +56,13 @@ Edit `cards.json`, then `make cards`. You can do this while the game is
 running. If the file has a mistake, the server keeps the last good version and
 prints what is wrong in the terminal, so a typo can't take the game down.
 
+### Make a sprite from pixel art
+    python tools/make_sprite.py ~/Downloads/dog.png pages/assets/dog.png --preview /tmp/p.png
+It finds the big-pixel grid, shrinks to the real tiny size, removes the white
+background and trims. Keep the small file: the browser enlarges it with
+`image-rendering: pixelated`. Then use it as `settings.mascot` or a card's `image`.
+If the detected size looks wrong, pass `--block N`.
+
 ### Add a new card type
 1. `tools/check_cards.py`: add the name to `CARD_TYPES` (plus any new fields to `_check_card`).
 2. `pages/play.html`: write a handler (see `cardConfirm`, `cardText`, ...) and add it to the map in `drawCard()`.
@@ -87,7 +94,7 @@ sensors can't be simulated.
 ## Before the party
 
 - [ ] Put the real payment handle in `settings.albert_handle` (`make cards` warns until you do).
-- [ ] Set `HOST_KEY` to something other than `host`.
+- [ ] Set `HOST_KEY` to something other than `albert`.
 - [ ] `make cards` and `make check` pass.
 - [ ] Rehearse on real phones, on the real WiFi, with the real TV.
 - [ ] G-force and "brightest light" need `https://`. Test them through your tunnel or host.
