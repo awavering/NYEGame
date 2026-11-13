@@ -68,6 +68,8 @@ MIDNIGHT_ISO = os.environ.get("MIDNIGHT_ISO")
 POLL_RESULTS_SECONDS = 20
 # How many old polls the host page remembers.
 POLL_LOG_SIZE = 50
+# How long the mascot stays on the TV saying a guest's caption (a newer caption replaces it sooner).
+MASCOT_LINE_SECONDS = 180
 
 ICONS = [
     "🦄",
@@ -160,6 +162,7 @@ def fresh_state():
         "flash": None,
         "finale": False,  # False, "midnight" (Happy New Year) or "thanks" (host ended early)
         "midnight_done": False,  # the automatic midnight finale has happened
+        "mascot_line": None,  # latest caption for the TV mascot: {text, name, t}
     }
 
 
@@ -644,6 +647,12 @@ def api_respond():
                     bonus, note = 1, note + " Close enough, +1!"
             elif t == "gforce":
                 note = f"{value:.2f} g recorded!"
+
+        if card.get("mascot_caption"):
+            # This card writes the mascot's line: the TV shows it in a speech bubble
+            # for MASCOT_LINE_SECONDS, or until the next guest answers this card.
+            state["mascot_line"] = {"text": answer, "name": p["name"], "t": time.time()}
+            note = "Look at the TV!"
         return jsonify(finish(pid, card, "done", answer=answer, bonus=bonus, note=note))
 
 
@@ -830,6 +839,15 @@ def retire_poll():
     state["poll"] = None
 
 
+def mascot_line_for_tv():
+    """The mascot's current caption, or None once it is older than MASCOT_LINE_SECONDS.
+    `id` changes with every new caption, so the TV knows when to redraw. Call while holding lock."""
+    line = state.get("mascot_line")
+    if not line or time.time() - line["t"] > MASCOT_LINE_SECONDS:
+        return None
+    return {"id": str(line["t"]), "text": line["text"], "name": line["name"]}
+
+
 def category_stats():
     cats = {}
     for h in state["history"]:
@@ -923,6 +941,7 @@ def api_tv():
                 "icon": icon,
                 "flash": flash,
                 "feed": feed,
+                "mascot_line": mascot_line_for_tv(),
                 "finale": bool(state["finale"]),
                 "finale_kind": finale_kind(),
                 # Every visible photo, for the finale slideshow (only sent then).

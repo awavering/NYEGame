@@ -69,9 +69,18 @@ def _check_card(i, card, draw_things, settings, assets_dir, errors, warnings):
     if "hint" in card and not isinstance(card["hint"], str):
         errors.append(f'{where}: "hint" must be text.')
     # "once": never dealt again after it is done. "starter": can be someone's first card.
-    for flag in ("once", "starter"):
+    # "mascot_caption": the answer becomes the TV mascot's speech bubble (text cards only).
+    for flag in ("once", "starter", "mascot_caption"):
         if flag in card and not isinstance(card[flag], bool):
             errors.append(f'{where}: "{flag}" must be true or false.')
+    if card.get("mascot_caption") and card.get("type") != "text":
+        errors.append(
+            f'{where}: "mascot_caption" only works on text cards (the answer is what the mascot says).'
+        )
+    if card.get("mascot_caption") and not settings.get("mascot"):
+        warnings.append(
+            f'{where}: has "mascot_caption" but settings has no "mascot", so nothing will show on the TV.'
+        )
 
     if "image" in card:
         _check_image(where, card["image"], assets_dir, errors)

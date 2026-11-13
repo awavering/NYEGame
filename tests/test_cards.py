@@ -76,6 +76,8 @@ def edited(mutate):
         (lambda d: d["cards"][0].update(grade="vibes"), '"grade" only works'),
         (lambda d: d["cards"][0].update(once="yes"), '"once" must be true or false'),
         (lambda d: d["cards"][0].update(starter=1), '"starter" must be true or false'),
+        (lambda d: d["cards"][0].update(mascot_caption="yes"), '"mascot_caption" must be true or false'),
+        (lambda d: d["cards"][0].update(mascot_caption=True), '"mascot_caption" only works on text cards'),
         (lambda d: d["settings"].update(skip_wait_seconds=-5), '"skip_wait_seconds" must be a number'),
         (lambda d: d.update(cards=[]), "non-empty list"),
         (

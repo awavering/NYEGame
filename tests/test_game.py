@@ -121,9 +121,9 @@ def test_photo_upload_completes_the_card_and_is_resized(client, make_player):
 
 def test_junk_upload_is_rejected(make_player):
     ann = make_player()
-    ann.give("crispy")
-    assert ann.upload("crispy", data=b"not an image").status_code == 400
-    assert ann.me()["card"]["id"] == "crispy"  # still theirs to complete
+    ann.give("lego")
+    assert ann.upload("lego", data=b"not an image").status_code == 400
+    assert ann.me()["card"]["id"] == "lego"  # still theirs to complete
 
 
 def test_draw_prompt_names_the_thing_to_draw(make_player):
@@ -601,3 +601,47 @@ def test_a_poll_that_timed_out_can_be_shown_again(client, host):
 
 def test_showing_an_unknown_poll_is_an_error(client, host):
     assert client.post("/api/host/poll/show", json={"id": "nope"}, headers=host).status_code == 404
+
+
+# ---------------------------------------------------------------- the mascot's caption card
+
+
+def test_answering_the_crispy_card_puts_crispy_on_the_tv(client, make_player):
+    assert client.get("/api/tv").get_json()["mascot_line"] is None  # hidden until someone gives him a line
+    ann = make_player("Ann")
+    ann.give("crispy")
+    reply = ann.respond("crispy", answer="Where are the snacks?").get_json()
+    assert reply["note"] == "Look at the TV!" and reply["points_earned"] == 1
+    line = client.get("/api/tv").get_json()["mascot_line"]
+    assert line["text"] == "Where are the snacks?" and line["name"] == "Ann"
+
+
+def test_the_next_crispy_answer_replaces_the_line(client, make_player):
+    ann, ben = make_player("Ann"), make_player("Ben")
+    ann.give("crispy")
+    ann.respond("crispy", answer="Woof")
+    first = client.get("/api/tv").get_json()["mascot_line"]
+    game.state["mascot_line"]["t"] -= 5  # a few seconds later
+    ben.give("crispy")
+    ben.respond("crispy", answer="Happy New Year!")
+    line = client.get("/api/tv").get_json()["mascot_line"]
+    assert line["text"] == "Happy New Year!" and line["name"] == "Ben" and line["id"] != first["id"]
+
+
+def test_crispy_leaves_after_three_minutes(client, make_player):
+    ann = make_player()
+    ann.give("crispy")
+    ann.respond("crispy", answer="Woof")
+    game.state["mascot_line"]["t"] -= game.MASCOT_LINE_SECONDS - 1
+    assert client.get("/api/tv").get_json()["mascot_line"] is not None
+    game.state["mascot_line"]["t"] -= 2
+    assert client.get("/api/tv").get_json()["mascot_line"] is None
+
+
+def test_skipping_or_other_cards_dont_make_crispy_talk(client, make_player):
+    ann = make_player()
+    ann.give("crispy")
+    ann.respond("crispy", "decline")
+    ann.give("intro")
+    ann.respond("intro", answer="Maria")
+    assert client.get("/api/tv").get_json()["mascot_line"] is None

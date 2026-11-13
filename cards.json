@@ -34,10 +34,11 @@
       "prompt": "Take a selfie with someone and upload it",
       "hint": "Whoever is standing closest to you!" },
 
-    { "id": "crispy", "category": "Photos", "type": "photo", "camera": "environment", "points": 3,
+    { "id": "crispy", "category": "Crispy", "type": "text", "points": 1, "mascot_caption": true,
       "image": "dog.png",
-      "prompt": "Find and take a picture of Crispy the dog",
-      "hint": "That's him on the screen. Now find the real one!" },
+      "prompt": "Give Crispy something to say",
+      "hint": "He'll say it on the big screen for 3 minutes (or until someone else gives him a new line).",
+      "placeholder": "Woof?" },
 
     { "id": "intro", "category": "Social", "type": "text", "points": 1, "starter": true,
       "prompt": "Introduce yourself to someone new. What's their name?",

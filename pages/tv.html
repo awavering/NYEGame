@@ -15,19 +15,21 @@
   h1 { margin:0 0 4px; font-size:clamp(22px,2.2vw,40px); }
   .label { text-transform:uppercase; letter-spacing:.14em; font-size:clamp(11px,.9vw,16px); color:var(--dim); font-weight:700; }
   .left { display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; }
-  .left img { width:100%; max-width:340px; background:#fff; border-radius:18px; padding:8px; }
+  .left #qr { width:100%; max-width:340px; background:#fff; border-radius:18px; padding:8px; }
   .url { font-family:ui-monospace,Menlo,monospace; font-size:clamp(12px,1.1vw,20px); color:var(--accent); word-break:break-all; }
   .count { font-size:clamp(36px,4vw,72px); font-weight:900; line-height:1; }
   .clock { margin-top:auto; color:var(--ink); font-size:clamp(18px,1.8vw,34px); font-weight:800; }
-  /* mascot: a pixel-art sprite; --px (set by script) is its whole-number scale */
-  #mascot { flex:1; min-height:0; width:100%; display:flex; align-items:flex-end; justify-content:center; position:relative; visibility:hidden; }
-  #mascot.on { visibility:visible; }
+  /* mascot: a pixel-art sprite that only appears while someone's caption for it is
+     current. --px (set by script) is the whole-number scale shared by the dog and his
+     speech bubble, so their pixels are the same size. */
+  #mascot { flex:1; min-height:0; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; visibility:hidden; }
+  #mascot.on { visibility:visible; animation:pop .5s ease-out; }
   #dog { display:block; image-rendering:pixelated; --px:1; animation:bob 1.6s steps(1,end) infinite; }
   @keyframes bob { 0% { transform:translateY(0); } 50% { transform:translateY(calc(var(--px) * -1px)); } }
   #dog.hop { animation:hop .7s steps(1,end) 1; }
   @keyframes hop { 0% { transform:translateY(0); } 15% { transform:translateY(calc(var(--px) * -5px)); } 35% { transform:translateY(calc(var(--px) * -8px)); } 55% { transform:translateY(calc(var(--px) * -5px)); } 75% { transform:translateY(calc(var(--px) * -1px)); } 100% { transform:translateY(0); } }
-  #bubble { position:absolute; top:0; left:50%; transform:translateX(-50%); background:#fff; color:#222; font-weight:700; padding:8px 14px; border-radius:14px; font-size:clamp(14px,1.3vw,24px); text-align:center; opacity:0; transition:opacity .2s; max-width:100%; }
-  #bubble.show { opacity:1; }
+  #bubble { display:block; image-rendering:pixelated; margin-bottom:calc(var(--px, 3) * 2px); }   /* a canvas: see drawBubble() */
+  #byline { color:var(--dim); font-size:clamp(11px,.9vw,16px); margin-top:6px; }
 
   /* ---- bouncing photos (big enough to see from the couch) ---- */
   #stage { position:relative; overflow:hidden; border-radius:24px; border:2px dashed rgba(255,255,255,.08); }
@@ -126,7 +128,7 @@
     <img id="qr" src="/qr/join.png" alt="Join QR code">
     <div class="url" id="joinurl"></div>
     <div><div class="count" id="players">0</div><div class="label">players</div></div>
-    <div id="mascot"><div id="bubble"></div><img id="dog" alt=""></div>
+    <div id="mascot"><canvas id="bubble"></canvas><img id="dog" alt=""><div id="byline"></div></div>
     <div class="clock" id="clock"></div>
   </section>
 
@@ -398,35 +400,115 @@ function chooseOverlay(d) {
 }
 
 /* ---------------- mascot ----------------
-   A pixel-art sprite in the left panel (set settings.mascot in cards.json). It is drawn at a
-   whole-number multiple of its real size so the pixels stay sharp, bobs gently, and hops with a
-   speech bubble whenever someone completes (or skips) a task. */
-const mascot = $('#mascot'), dog = $('#dog'), bubble = $('#bubble');
-let bubbleTimer = null, lastTotal = null;
+   A pixel-art sprite in the left panel (settings.mascot in cards.json). It only shows up
+   while someone's caption for it is current: a guest answers its card ("Give Crispy
+   something to say"), and it says that line in a pixel-art speech bubble. The server
+   decides how long a line lasts (3 minutes, or until the next one), so every TV agrees.
 
+   Everything is drawn at a whole-number multiple of its real pixel size (the scale "k"),
+   so the dog, the bubble and the letters all have the same chunky, sharp pixels. */
+const mascot = $('#mascot'), dog = $('#dog'), bubble = $('#bubble'), byline = $('#byline');
+let line = null, lineKey = null;    // the caption on screen now (from /api/tv), and which one
+
+// Bubble measurements, in sprite pixels (before scaling up).
+const TEXT_PX = 9;       // letter height
+const TEXT_MAX_W = 96;   // wrap lines longer than this
+const MAX_LINES = 5;
+const PAD = 3;           // white space between the outline and the text
+const TAIL = 4;          // how far the little pointer sticks down towards the dog
+
+/* Draw `text` as crisp pixel lettering: let the browser draw it small, then make every
+   pixel either fully ink or fully clear (normally edges are soft and half-see-through,
+   which would look blurry once scaled up). Returns a canvas, sized to fit. */
+function pixelText(text) {
+  const tmp = document.createElement('canvas').getContext('2d');
+  const font = `bold ${TEXT_PX}px Verdana, Geneva, sans-serif`;   // Verdana stays legible at tiny sizes
+  tmp.font = font;
+  // word-wrap
+  const lines = [];
+  let cur = '';
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    const next = cur ? cur + ' ' + word : word;
+    if (cur && tmp.measureText(next).width > TEXT_MAX_W) { lines.push(cur); cur = word; } else cur = next;
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > MAX_LINES) { lines.length = MAX_LINES; lines[MAX_LINES - 1] += '…'; }
+
+  const lineH = TEXT_PX + 2;
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(Math.min(TEXT_MAX_W * 1.4, Math.max(...lines.map(l => tmp.measureText(l).width)))));
+  c.height = lines.length * lineH;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = '#000';
+  lines.forEach((l, i) => ctx.fillText(l, c.width / 2, i * lineH + 1));
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  for (let i = 0; i < img.data.length; i += 4) {          // each pixel: R, G, B, alpha
+    const on = img.data[i + 3] >= 110;
+    img.data[i] = 0x1b; img.data[i + 1] = 0x17; img.data[i + 2] = 0x35;   // dark ink
+    img.data[i + 3] = on ? 255 : 0;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/* The speech bubble: white box, 1-pixel dark outline with notched (pixel-rounded)
+   corners, and a stepped pointer at the bottom aiming at the dog. */
+function drawBubble(text) {
+  const t = pixelText(text);
+  const W = t.width + 2 * PAD + 2, bodyH = t.height + 2 * PAD + 2;
+  bubble.width = W; bubble.height = bodyH + TAIL + 1;  // +1: the pointer's tip. (Setting the size also clears it.)
+  const g = bubble.getContext('2d');
+  const ink = '#1b1735', paper = '#ffffff';
+  g.fillStyle = ink;                                   // outline: the box minus its 4 corner pixels
+  g.fillRect(1, 0, W - 2, bodyH);
+  g.fillRect(0, 1, W, bodyH - 2);
+  g.fillStyle = paper;                                 // inside
+  g.fillRect(1, 1, W - 2, bodyH - 2);
+  const mid = Math.floor(W / 2);                       // pointer: rows get narrower going down
+  for (let r = 0; r < TAIL; r++) {
+    const half = TAIL - 1 - r, y = bodyH - 1 + r;
+    g.fillStyle = paper; g.fillRect(mid - half, y, 2 * half + 1, 1);
+    g.fillStyle = ink; g.fillRect(mid - half - 1, y, 1, 1); g.fillRect(mid + half + 1, y, 1, 1);
+  }
+  g.fillRect(mid, bodyH - 1 + TAIL, 1, 1);             // the pointer's tip
+  g.drawImage(t, 1 + PAD, 1 + PAD);                    // the words
+}
+
+/* Pick the biggest whole-number scale at which the bubble, the dog and the name all fit. */
 function fitMascot() {
-  if (!dog.naturalWidth) return;
-  const k = Math.floor(Math.min(mascot.clientWidth / dog.naturalWidth, (mascot.clientHeight - 56) / dog.naturalHeight));
-  mascot.classList.toggle('on', k >= 2);              // too little room: hide it rather than squash it
-  if (k >= 2) { dog.style.width = dog.naturalWidth * k + 'px'; dog.style.setProperty('--px', k); }
+  const ready = line && dog.naturalWidth;
+  if (ready) {
+    const w = Math.max(dog.naturalWidth, bubble.width);
+    const h = dog.naturalHeight + bubble.height + 2;                    // +2: gap under the bubble
+    const room = mascot.clientHeight - byline.offsetHeight - 6;
+    const k = Math.floor(Math.min(mascot.clientWidth / w, room / h));
+    if (k >= 2) {                                                       // too little room: hide rather than squash
+      mascot.style.setProperty('--px', k); dog.style.setProperty('--px', k);
+      dog.style.width = dog.naturalWidth * k + 'px';
+      bubble.style.width = bubble.width * k + 'px';
+      bubble.style.height = bubble.height * k + 'px';
+      return mascot.classList.add('on');
+    }
+  }
+  mascot.classList.remove('on');
 }
 function showMascot(url) { dog.onload = fitMascot; dog.src = url; }
 window.addEventListener('resize', fitMascot);
 dog.addEventListener('animationend', (e) => { if (e.animationName === 'hop') dog.classList.remove('hop'); });
 
-function say(text) {
-  bubble.textContent = text; bubble.classList.add('show');
-  clearTimeout(bubbleTimer); bubbleTimer = setTimeout(() => bubble.classList.remove('show'), 3000);
-}
-function mascotReacts(ev) {
-  if (!mascot.classList.contains('on')) return;
-  if (ev.result === 'done') {
-    const lines = [`Nice one, ${ev.name}!`, `Woof! Go ${ev.name}!`, `Good job, ${ev.name}!`, `${ev.name} did it!`];
-    say(lines[Math.floor(Math.random() * lines.length)]);
-    dog.classList.remove('hop'); void dog.offsetWidth; dog.classList.add('hop');   // restart the hop
-  } else if (ev.result === 'declined') {
-    say(`Aww, ${ev.name} skipped...`);
+/* Called on every refresh with the server's current caption (or null). Only redraws
+   when the caption changes; a new one makes the dog pop in and hop. */
+function showLine(next) {
+  const key = next ? next.id : null;
+  if (key === lineKey) return;
+  lineKey = key; line = next;
+  if (line) {
+    drawBubble(line.text);
+    byline.textContent = 'from ' + line.name;
+    mascot.classList.remove('on'); void mascot.offsetWidth;            // restart the pop-in
+    dog.classList.remove('hop'); void dog.offsetWidth; dog.classList.add('hop');
   }
+  fitMascot();
 }
 
 /* ---------------- main refresh ---------------- */
@@ -457,9 +539,7 @@ async function tick() {
   drawFeed(d.feed);
   syncPhotos(d.photos);
 
-  const total = d.completed + d.declined;         // react only to new events, not the ones already there at page load
-  if (lastTotal !== null && total > lastTotal && d.feed.length) mascotReacts(d.feed[0]);
-  lastTotal = total;
+  showLine(d.mascot_line);
 
   const o = chooseOverlay(d);
   if (o.key !== lastOverlay) {
