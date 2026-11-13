@@ -51,11 +51,16 @@ starters quick and friendly (a selfie, get a drink). If no card is a starter, an
 **One-time cards:** `"once": true` means the card never comes back after someone does it,
 even when the deck starts over (used for "Send Albert $1"). If they skip it, it can come back.
 
+**Mascot captions:** `"mascot_caption": true` on a text card makes the answer the mascot's
+line. The mascot appears on the TV saying it in a pixel-art speech bubble for 3 minutes, or
+until someone answers that card again. It stays hidden the rest of the time (used for
+"Give Crispy something to say").
+
 **Settings** at the top of `cards.json`: party name, the `albert_handle` shown in the
 "Send Albert $1" card, `approve_photos` (true = photos stay off the TV until you
 approve them in the host page), `tv_photo_limit` (how many photos bounce on the TV at
 once), `skip_wait_seconds` (see Scoring), and `mascot` (a file in `pages/assets/`,
-such as `"dog.png"`, that sits on the TV and reacts when guests finish or skip a card).
+such as `"dog.png"`, shown on the TV when someone gives it a caption: see Mascot captions).
 
 ## Host page
 
