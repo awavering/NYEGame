@@ -607,7 +607,7 @@ def test_showing_an_unknown_poll_is_an_error(client, host):
 
 
 def test_answering_the_crispy_card_puts_crispy_on_the_tv(client, make_player):
-    assert client.get("/api/tv").get_json()["mascot_line"] is None  # hidden until someone gives him a line
+    assert client.get("/api/tv").get_json()["mascot_line"] is None  # hidden until someone gives her a line
     ann = make_player("Ann")
     ann.give("crispy")
     reply = ann.respond("crispy", answer="Where are the snacks?").get_json()
