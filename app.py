@@ -66,6 +66,8 @@ TZ = ZoneInfo(os.environ.get("TZ_NAME", "America/Denver"))
 MIDNIGHT_ISO = os.environ.get("MIDNIGHT_ISO")
 # How long a closed poll's results stay on the TV before it goes back to normal.
 POLL_RESULTS_SECONDS = 20
+# How long a flash QR stays on the TV unless the host picks another time.
+FLASH_SECONDS = 15
 # How many old polls the host page remembers.
 POLL_LOG_SIZE = 50
 # How long the mascot stays on the TV saying a guest's caption (a newer caption replaces it sooner).
@@ -420,6 +422,13 @@ def host_page():
 def host_print():
     check_host()
     return send_from_directory(PAGES, "print.html")
+
+
+@app.get("/prompts")
+def prompts_page():
+    # Host only: it lists every card, including the secret QR codes.
+    check_host()
+    return send_from_directory(PAGES, "prompts.html")
 
 
 @app.get("/s/<code>")
@@ -913,7 +922,9 @@ def api_tv():
             flash = {
                 "token": fl["token"],
                 "remaining": round(fl["until"] - time.time()),
-                "total": fl.get("seconds", 60),
+                # exact seconds left, so the TV's timer bar can slide smoothly to the end
+                "ends_in": round(fl["until"] - time.time(), 2),
+                "total": fl.get("seconds", FLASH_SECONDS),
                 "bonus": fl["bonus"],
                 "claimed": len(fl["claimed"]),
             }
@@ -1004,6 +1015,40 @@ def host_data():
                 ],
                 "phase": current_phase(),
                 "minutes_to_midnight": round(hours_to_midnight() * 60),
+            }
+        )
+
+
+@app.get("/api/host/cards")
+def host_cards():
+    """Every card in cards.json, as written, plus how it has gone tonight
+    (dealt / done / skipped), for the prompts page."""
+    check_host()
+    with lock:
+        data = load_cards()
+        results = {}
+        for h in state["history"]:
+            if h["card_id"] and h["result"] in ("done", "declined"):
+                counts = results.setdefault(h["card_id"], {"done": 0, "declined": 0})
+                counts[h["result"]] += 1
+        cards = []
+        for c in data["cards"]:
+            counts = results.get(c["id"], {"done": 0, "declined": 0})
+            cards.append(
+                {
+                    **c,
+                    "points": c.get("points", 1),
+                    "dealt": state["assigned"].get(c["id"], 0),
+                    "done": counts["done"],
+                    "skipped": counts["declined"],
+                }
+            )
+        return jsonify(
+            {
+                "cards": cards,
+                "draw_things": data.get("draw_things", []),
+                "albert_handle": settings().get("albert_handle", ""),
+                "phase": current_phase(),
             }
         )
 
@@ -1102,7 +1147,7 @@ def host_flash():
     check_host()
     data = request.get_json(silent=True) or {}
     try:
-        seconds = max(10, min(int(data.get("seconds", 60)), 600))
+        seconds = max(10, min(int(data.get("seconds", FLASH_SECONDS)), 600))
         bonus = max(1, min(int(data.get("bonus", 3)), 20))
     except (TypeError, ValueError):
         return jsonify({"error": "Seconds and points must be numbers."}), 400

@@ -77,6 +77,8 @@ such as `"dog.png"`, shown on the TV when someone gives it a caption: see Mascot
 - **Poll log**: every poll from tonight with its top answer. **Show on TV** brings a poll's
   final results back (no new answers) and keeps them up until you press Clear from TV.
 - **Photos**: tap one to hide or show it on the TV.
+- **All prompts** (link at the top, or `/prompts?key=...`): every card with its points, settings,
+  secret codes, time-of-night weights, and how often it has been dealt, done and skipped tonight.
 - **Print the secret QR codes**: prints the QR tags for the scavenger-hunt cards.
 - **Reset**: wipes players, scores, and photos. Use it after rehearsal!
 

@@ -38,5 +38,5 @@ def test_every_api_path_used_by_a_page_exists_on_the_server():
 
 
 def test_every_page_the_server_serves_exists():
-    for name in ("play", "tv", "host", "print", "claim"):
+    for name in ("play", "tv", "host", "print", "claim", "prompts"):
         assert (ROOT / "pages" / f"{name}.html").exists()

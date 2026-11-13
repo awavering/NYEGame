@@ -20,7 +20,7 @@ def test_public_pages_load(client, path):
 
 
 def test_host_pages_need_the_key(client):
-    for path in ("/host", "/host/print", "/api/host/data"):
+    for path in ("/host", "/host/print", "/prompts", "/api/host/data", "/api/host/cards"):
         assert client.get(path).status_code == 403
         assert client.get(f"{path}?key={game.HOST_KEY}").status_code == 200
 
@@ -645,3 +645,30 @@ def test_skipping_or_other_cards_dont_make_crispy_talk(client, make_player):
     ann.give("intro")
     ann.respond("intro", answer="Maria")
     assert client.get("/api/tv").get_json()["mascot_line"] is None
+
+
+def test_flash_qr_lasts_15_seconds_by_default(client, host):
+    client.post("/api/host/flash", json={}, headers=host)
+    flash = client.get("/api/tv").get_json()["flash"]
+    assert flash["total"] == 15
+    assert 14 < flash["ends_in"] <= 15  # exact time left, for the TV's smooth timer bar
+
+
+# ---------------------------------------------------------------- prompts page
+
+
+def test_prompts_page_lists_every_card_with_tonights_stats(client, make_player, host):
+    ann, ben = make_player("Ann"), make_player("Ben")
+    ann.give("get_drink")
+    ann.respond("get_drink")
+    ben.give("get_drink")
+    ben.respond("get_drink", "decline")
+    data = client.get("/api/host/cards", headers=host).get_json()
+    assert [c["id"] for c in data["cards"]] == [c["id"] for c in game.load_cards()["cards"]]
+    drink = next(c for c in data["cards"] if c["id"] == "get_drink")
+    assert (drink["done"], drink["skipped"]) == (1, 1)
+    assert drink["dealt"] == game.state["assigned"].get("get_drink", 0)  # real deals (give() skips the count)
+    assert drink["weights"]["early"] == 2 and drink["starter"]
+    qr = next(c for c in data["cards"] if c["type"] == "secret_qr")
+    assert qr["code"] and qr["location"]  # host only, so the secret codes are included
+    assert data["phase"] == "early" and data["draw_things"]

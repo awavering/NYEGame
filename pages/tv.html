@@ -84,7 +84,7 @@
   .biglabel { font-size:clamp(16px,1.8vw,30px); color:var(--dim); margin-top:14px; }
   #flashqr { background:#fff; padding:14px; border-radius:20px; width:min(42vh,420px); }
   .meter { height:14px; background:#2a2552; border-radius:99px; margin:16px auto 0; width:min(60vw,600px); overflow:hidden; }
-  .meter div { height:100%; background:var(--pink); transition:width 1s linear; }
+  .meter div { height:100%; background:var(--pink); }   /* its slide is set by startFlashBar() */
 
   /* countdown: the last minute before midnight */
   .countdown { font-size:clamp(120px,30vw,560px); font-weight:900; line-height:1; color:var(--accent); text-shadow:0 0 60px rgba(255,204,51,.5); }
@@ -391,6 +391,29 @@ setInterval(() => {
   el.classList.toggle('final', s <= 10);
 }, 250);
 
+/* Flash QR timer bar. When a flash starts, the bar is set to how full it should be
+   right now, then told to slide to empty over exactly the time left: one smooth CSS
+   animation instead of a jump every time the TV asks the server for news. */
+let flash = null;            // {endsAt (Date.now() value), total seconds, claimed}
+function startFlashBar() {
+  const bar = $('#flashbar');
+  if (!bar || !flash) return;
+  const left = Math.max(0, (flash.endsAt - Date.now()) / 1000);
+  bar.style.transition = 'none';
+  bar.style.width = Math.min(100, 100 * left / flash.total) + '%';
+  void bar.offsetWidth;                              // apply that width before starting the slide
+  bar.style.transition = `width ${left}s linear`;
+  bar.style.width = '0%';
+  updateFlashInfo();
+}
+function updateFlashInfo() {
+  const info = $('#flashinfo');
+  if (!info || !flash) return;
+  const left = Math.max(0, Math.ceil((flash.endsAt - Date.now()) / 1000));
+  info.textContent = `${left}s left · ${flash.claimed} grabbed it`;
+}
+setInterval(updateFlashInfo, 250);
+
 /* Pick what goes full screen, most important first. Returns a short "key" so we
    only redraw when it actually changes (redrawing restarts animations). */
 function chooseOverlay(d) {
@@ -400,11 +423,13 @@ function chooseOverlay(d) {
     return { key: 'countdown', html: `<div class="biglabel" style="font-size:clamp(24px,3vw,56px)">Midnight in</div><div class="countdown" id="cd">${Math.max(0, s)}</div>` };
   }
   if (d.flash) {
-    const pct = Math.max(0, 100 * d.flash.remaining / (d.flash.total || 60));
-    return { key: 'flash' + d.flash.remaining + d.flash.claimed, corner: true, html: `<h2>⚡ FLASH QR! +${d.flash.bonus} points ⚡</h2>
+    // Drawn once per flash (the key is just its token); the bar and the "Xs left" text
+    // then animate by themselves (startFlashBar and the timer below), so nothing jumps.
+    flash = { endsAt: Date.now() + d.flash.ends_in * 1000, total: d.flash.total || 15, claimed: d.flash.claimed };
+    return { key: 'flash' + d.flash.token, corner: true, flash: true, html: `<h2>⚡ FLASH QR! +${d.flash.bonus} points ⚡</h2>
       <img id="flashqr" src="/qr/flash/${d.flash.token}.png" alt="">
-      <div class="meter"><div style="width:${Math.min(100, pct)}%"></div></div>
-      <p class="biglabel">${d.flash.remaining}s left · ${d.flash.claimed} grabbed it</p>` };
+      <div class="meter"><div id="flashbar"></div></div>
+      <p class="biglabel" id="flashinfo"></p>` };
   }
   if (d.poll) { const html = pollHtml(d.poll); return { key: html, html, corner: true }; }
   if (d.icon) {
@@ -562,6 +587,7 @@ async function tick() {
     lastOverlay = o.key;
     overlay(o.html);
     if (o.finale) { slidePhotos = d.finale_photos; slideIndex = 0; showSlide(); }
+    if (o.flash) startFlashBar();
   }
   slidePhotos = d.finale_photos.length ? d.finale_photos : slidePhotos;
   confetti(!!o.finale);
