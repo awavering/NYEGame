@@ -4,7 +4,7 @@ NYE party game server.
 Run it:   python app.py
 TV:       http://<your-ip>:5000/tv
 Phones:   scan the QR code on the TV (goes to /play)
-Host:     http://<your-ip>:5000/host?key=albert   (change the key with HOST_KEY)
+Host:     http://<your-ip>:5000/host?key=<HOST_KEY>   (set HOST_KEY in .env)
 
 Everything that guests see is driven by cards.json. State is saved to
 state.json after every change, so a restart does not lose the game.
@@ -33,7 +33,9 @@ import json
 import math
 import os
 import random
+import secrets
 import socket
+import sys
 import threading
 import time
 import uuid
@@ -59,7 +61,13 @@ STATE_FILE = os.path.join(DATA_DIR, "state.json")
 CARDS_FILE = os.environ.get("CARDS_FILE", os.path.join(BASE, "cards.json"))
 os.makedirs(UPLOADS, exist_ok=True)
 
-HOST_KEY = os.environ.get("HOST_KEY", "albert")
+# The host page's password. It is never written in the code: set HOST_KEY in
+# .env (see .env.example). With no key set, each start makes up a random one,
+# so a server that lost its settings is locked rather than open to a guess.
+HOST_KEY = os.environ.get("HOST_KEY")
+if not HOST_KEY:
+    HOST_KEY = secrets.token_hex(4)
+    print(f"HOST_KEY is not set. Using a random host key for this run: {HOST_KEY}", file=sys.stderr)
 PORT = int(os.environ.get("PORT", "5000"))
 TZ = ZoneInfo(os.environ.get("TZ_NAME", "America/Denver"))
 # For testing you can fake the countdown, e.g. MIDNIGHT_ISO=2026-10-16T00:00:00
