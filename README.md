@@ -12,8 +12,9 @@ It prints three links:
 
 - **TV**: open `/tv` full-screen in a browser on the TV (or a laptop plugged into it).
 - **Phones**: guests scan the QR code on the TV, which goes to `/play`.
-- **Host**: open `/host?key=albert` on your own phone. Change the key by starting the
-  server with `HOST_KEY=something python app.py`.
+- **Host**: open the host link on your own phone. It ends in `?key=...`, your host key.
+  Set the key by starting the server with `HOST_KEY=something python app.py` (or put it in
+  `.env`, see `.env.example`). With no key set, the server makes up a random one each start.
 
 Your laptop and the guests' phones must be on the same WiFi. If phones can't connect,
 the router may have "client isolation" turned on. Turn it off, use a hotspot, or

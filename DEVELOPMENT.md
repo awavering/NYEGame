@@ -94,7 +94,7 @@ sensors can't be simulated.
 ## Before the party
 
 - [ ] Put the real payment handle in `settings.albert_handle` (`make cards` warns until you do).
-- [ ] Set `HOST_KEY` to something other than `albert`.
+- [ ] Set `HOST_KEY` in `.env` (on the server: `/home/protected/NYEGame/.env`). The key is not in the code or in git.
 - [ ] `make cards` and `make check` pass.
 - [ ] Rehearse on real phones, on the real WiFi, with the real TV.
 - [ ] G-force and "brightest light" need `https://`. Test them through your tunnel or host.
@@ -133,7 +133,7 @@ includes gunicorn.
 | Render setting | Value |
 |---|---|
 | Start command | `gunicorn -w 1 --threads 8 --bind 0.0.0.0:$PORT app:app` |
-| Environment | `PYTHON_VERSION` = `3.12` (what CI tests). `HOST_KEY` is optional (default `albert`) |
+| Environment | `PYTHON_VERSION` = `3.12` (what CI tests). `HOST_KEY` = your host key (if unset, a random key is made each start and printed in the log) |
 | Instances | exactly 1 (never scale up or autoscale: see above) |
 
 If your service has no build step, put `pip install -r requirements.txt && `
@@ -183,8 +183,9 @@ the server needs no restart.
 
 - The site is on the Non-Production plan (1 GiB/day bandwidth). Switch to
   Production under Billing Information for party night.
-- If `.env` fails to load, the host key falls back to `albert`. Check that
-  `/host?key=albert` returns 403.
+- The host key is `HOST_KEY` in the server's `.env`. If `.env` fails to load,
+  the app makes up a random key (printed in the daemon log), so the host page
+  is locked rather than open. To change the key, edit `.env` and restart the daemon.
 - Reset from the host page so rehearsal scores and photos are gone.
 
 ## Known limits and ideas
