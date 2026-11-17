@@ -12,6 +12,7 @@ state.json after every change, so a restart does not lose the game.
 Map of this file (top to bottom):
   Cards        load_cards(): cards.json, re-read when edited, validated
   State        one dict (`state`) guarded by `lock`, saved with save()
+  Archive      archive_game() / reset_game(): a finished game moves to archive/<date>/
   Time         hours_to_midnight() / current_phase() drive card weights
   Dealing      pick_card() chooses the next card, finish() records the result
   Pages + QR   the HTML pages and generated QR images
@@ -34,6 +35,7 @@ import math
 import os
 import random
 import secrets
+import shutil
 import socket
 import sys
 import threading
@@ -58,6 +60,8 @@ ASSETS = os.path.join(PAGES, "assets")  # pictures (sprites) the pages can show
 DATA_DIR = os.environ.get("GAME_DATA_DIR", BASE)
 UPLOADS = os.path.join(DATA_DIR, "uploads")
 STATE_FILE = os.path.join(DATA_DIR, "state.json")
+# Finished games are kept here, one dated folder each (see archive_game()).
+ARCHIVE = os.path.join(DATA_DIR, "archive")
 CARDS_FILE = os.environ.get("CARDS_FILE", os.path.join(BASE, "cards.json"))
 os.makedirs(UPLOADS, exist_ok=True)
 
@@ -168,6 +172,7 @@ def fresh_state():
         "photos": [],  # uploaded pictures
         "poll": None,  # the current poll (the one the TV can show)
         "poll_log": [],  # earlier polls, oldest first, so the host can show them again
+        "poll_answers": [],  # every poll answer ever given, in order (for the archive)
         "icon_sync": None,
         "flash": None,
         "finale": False,  # False, "midnight" (Happy New Year) or "thanks" (host ended early)
@@ -197,6 +202,52 @@ def save():
 
 
 state = load_state()
+
+
+# --------------------------------------------------------------------------
+# Archive (a finished game is kept, never thrown away)
+# --------------------------------------------------------------------------
+def today():
+    """Today's real date in the party's time zone (only used to name archive folders)."""
+    return datetime.now(TZ).date()
+
+
+def archive_game():
+    """Save the current game into archive/<date>/. Call while holding lock.
+
+    The folder gets state.json (players, every card result, polls and poll
+    answers), the photos, and the cards.json that was used, so an old game
+    can still be read later. Returns the folder name, or None if the game is
+    empty (so pressing Reset twice does not leave empty folders behind)."""
+    photos = [n for n in os.listdir(UPLOADS) if n.endswith(".jpg")]
+    played = state["players"] or state["history"] or state["poll"] or state["poll_log"]
+    if not (played or photos):
+        return None
+    # Two games on one day get 2026-12-31 and 2026-12-31-2.
+    name, n = today().isoformat(), 2
+    while os.path.exists(os.path.join(ARCHIVE, name)):
+        name, n = f"{today().isoformat()}-{n}", n + 1
+    folder = os.path.join(ARCHIVE, name)
+    os.makedirs(os.path.join(folder, "uploads"))
+    # Write the record first and move the photos last: if anything fails
+    # part-way, the live game is still complete.
+    with open(os.path.join(folder, "state.json"), "w", encoding="utf-8") as f:
+        json.dump(state, f)
+    if os.path.exists(CARDS_FILE):
+        shutil.copy(CARDS_FILE, os.path.join(folder, "cards.json"))
+    for photo in photos:
+        shutil.move(os.path.join(UPLOADS, photo), os.path.join(folder, "uploads", photo))
+    return name
+
+
+def reset_game():
+    """Archive the current game, then start an empty one. Returns the archive folder name (or None)."""
+    with lock:
+        name = archive_game()
+        state.clear()
+        state.update(fresh_state())
+        save()
+    return name
 
 
 # --------------------------------------------------------------------------
@@ -781,6 +832,18 @@ def api_poll_answer():
                 return jsonify({"error": "That needs to be a number."}), 400
         first = pid not in poll["answers"]
         poll["answers"][pid] = value
+        # poll["answers"] only keeps each guest's latest answer, and old polls
+        # drop off the poll log. This list keeps every answer for the archive.
+        state["poll_answers"].append(
+            {
+                "t": time.time(),
+                "poll_id": poll["id"],
+                "question": poll["question"],
+                "pid": pid,
+                "name": state["players"][pid]["name"],
+                "value": value,
+            }
+        )
         if first:
             add_event(pid, "Answered a poll", 1)
         save()
@@ -1205,14 +1268,8 @@ def host_photo():
 @app.post("/api/host/reset")
 def host_reset():
     check_host()
-    with lock:
-        state.clear()
-        state.update(fresh_state())
-        for name in os.listdir(UPLOADS):
-            if name.endswith(".jpg"):
-                os.remove(os.path.join(UPLOADS, name))
-        save()
-    return jsonify({"ok": True})
+    # Nothing is deleted: the old game moves into the archive folder first.
+    return jsonify({"ok": True, "archive": reset_game()})
 
 
 @app.errorhandler(400)

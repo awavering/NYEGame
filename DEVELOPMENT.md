@@ -38,6 +38,16 @@ That is plenty for 20 to 40 guests and keeps the code easy to follow.
 | `assigned` | card id -> how many times it has been dealt (used to even out the deck) |
 | `photos` | uploaded pictures and whether they are `visible` or `hidden` |
 | `poll`, `icon_sync`, `flash`, `finale` | the host moments |
+| `poll_answers` | every poll answer ever given, in order: `{t, poll_id, question, pid, name, value}`. `poll["answers"]` only holds each guest's latest answer and `poll_log` keeps the last 50 polls, so this list is the full record |
+
+### The archive
+
+Reset (the host page button, `/api/host/reset`, or `make reset`) calls
+`reset_game()`, which first calls `archive_game()`. That writes the whole
+`state` dict to `archive/<date>/state.json`, copies `cards.json` beside it and
+moves the photos into `archive/<date>/uploads/`, all inside `GAME_DATA_DIR`.
+An empty game is not archived. Nothing reads the archive back; it is a record.
+Anything new you add to `state` is archived automatically.
 
 ### The API
 
@@ -99,7 +109,7 @@ sensors can't be simulated.
 - [ ] Rehearse on real phones, on the real WiFi, with the real TV.
 - [ ] G-force and "brightest light" need `https://`. Test them through your tunnel or host.
 - [ ] Print the secret QR tags (host page) and stick them up. Scan each once.
-- [ ] `make reset` (or the host page's Reset) so rehearsal photos and scores are gone.
+- [ ] `make reset` (or the host page's "Start a new game") so rehearsal photos and scores are off the board. The rehearsal is saved in `archive/`; delete that folder if you don't want it.
 
 ## Testing notes
 
@@ -186,7 +196,8 @@ the server needs no restart.
 - The host key is `HOST_KEY` in the server's `.env`. If `.env` fails to load,
   the app makes up a random key (printed in the daemon log), so the host page
   is locked rather than open. To change the key, edit `.env` and restart the daemon.
-- Reset from the host page so rehearsal scores and photos are gone.
+- Start a new game from the host page so rehearsal scores and photos are off the board.
+  Past games are kept in `/home/protected/NYEGame/data/archive/`.
 
 ## Known limits and ideas
 
@@ -194,6 +205,6 @@ the server needs no restart.
 - **Identity is a browser setting.** A guest's id is stored in their phone's `localStorage`. Clearing browser data makes them a new player. There is no rename or leave.
 - **Honor system.** Nothing checks that someone really sent the $1 or used the no-phone box.
 - **Photos are only moderated by hiding.** `approve_photos` makes new photos wait for the host.
-- **One party per data folder.** Use `make reset` or a new `GAME_DATA_DIR` between events.
+- **One party at a time per data folder.** Use `make reset` or the host page between events; the finished game goes to `archive/`.
 - **The TV spotlights new photos** at most once every 15 seconds (`SPOT_GAP_MS` in `tv.html`), so a busy party doesn't hide the scoreboard.
-- Ideas not built: a results export, per-card stats on the host page, a host "undo points" button, sound on the TV at milestones, rate-limiting uploads.
+- Ideas not built: a page for browsing past games in `archive/`, a results export, per-card stats on the host page, a host "undo points" button, sound on the TV at milestones, rate-limiting uploads.

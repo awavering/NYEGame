@@ -223,6 +223,22 @@ def test_number_poll(client, make_player, host):
     assert players[0].points == 1  # one point for answering
 
 
+def test_every_poll_answer_is_logged(client, make_player, host):
+    ann, bob = make_player("Ann"), make_player("Bob")
+    client.post("/api/host/poll", json={"question": "Q1", "kind": "text"}, headers=host)
+    ann.poll_answer("one")
+    ann.poll_answer("two")  # changing an answer keeps both in the log
+    client.post("/api/host/poll", json={"question": "Q2", "kind": "text"}, headers=host)
+    bob.poll_answer("three")
+    log = game.state["poll_answers"]
+    assert [(a["question"], a["name"], a["value"]) for a in log] == [
+        ("Q1", "Ann", "one"),
+        ("Q1", "Ann", "two"),
+        ("Q2", "Bob", "three"),
+    ]
+    assert log[0]["poll_id"] == log[1]["poll_id"] != log[2]["poll_id"]
+
+
 def test_answering_a_poll_twice_only_scores_once(client, make_player, host):
     ann = make_player()
     client.post("/api/host/poll", json={"question": "Q", "kind": "text"}, headers=host)
@@ -435,6 +451,35 @@ def test_reset_wipes_players_scores_and_photos(client, make_player, host):
     assert game.state["players"] == {}
     assert list(Path(game.UPLOADS).glob("*.jpg")) == []
     assert client.get(f"/api/me?pid={ann.pid}").status_code == 404
+
+
+def test_reset_archives_the_game_first(client, make_player, host):
+    ann = make_player()
+    ann.give("selfie")
+    ann.upload("selfie")
+    photo = game.state["photos"][0]["file"]
+    name = client.post("/api/host/reset", headers=host).get_json()["archive"]
+    folder = Path(game.ARCHIVE) / name
+    assert name == game.today().isoformat()
+    saved = json.loads((folder / "state.json").read_text())
+    assert saved["players"][ann.pid]["name"] == "Ann"
+    assert saved["history"][0]["photo"] == saved["photos"][0]["id"]
+    assert (folder / "uploads" / photo).exists()  # moved, not deleted
+    assert (folder / "cards.json").exists()
+
+
+def test_reset_of_an_empty_game_archives_nothing(client, host):
+    assert client.post("/api/host/reset", headers=host).get_json()["archive"] is None
+    assert not Path(game.ARCHIVE).exists()
+
+
+def test_two_games_on_one_day_get_separate_archive_folders(client, make_player, host):
+    make_player()
+    first = client.post("/api/host/reset", headers=host).get_json()["archive"]
+    make_player()
+    second = client.post("/api/host/reset", headers=host).get_json()["archive"]
+    assert second == first + "-2"
+    assert (Path(game.ARCHIVE) / first / "state.json").exists()
 
 
 # ---------------------------------------------------------------- skipping, starter and once cards

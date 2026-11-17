@@ -74,7 +74,7 @@
   <h2>Setup</h2>
   <div class="row"><a id="promptslink" style="color:#ffcc33" target="_blank">See all prompts (cards, points, stats)</a></div>
   <div class="row"><a id="printlink" style="color:#ffcc33" target="_blank">Print the secret QR codes</a></div>
-  <div class="row"><button class="red" id="reset">Reset everything (new game)</button></div>
+  <div class="row"><button class="red" id="reset">Start a new game (this one is saved)</button></div>
 </section>
 
 <script>
@@ -144,7 +144,7 @@ $('#flash').onclick = () => call('/api/host/flash', { seconds: +$('#fsec').value
 $('#endearly').onclick = () => { if (confirm('End the game for everyone and show the final scores?')) call('/api/host/finale', { on: true, kind: 'thanks' }); };
 $('#finale').onclick = () => { if (confirm('Show the Happy New Year finale now?')) call('/api/host/finale', { on: true, kind: 'midnight' }); };
 $('#finaleoff').onclick = () => call('/api/host/finale', { on: false });
-$('#reset').onclick = () => { if (confirm('Wipe all players, scores and photos?')) call('/api/host/reset'); };
+$('#reset').onclick = () => { if (confirm('Start a new game? Players, scores and photos are saved to the archive first.')) call('/api/host/reset'); };
 $('#printlink').href = '/host/print?key=' + encodeURIComponent(key);
 $('#promptslink').href = $('#promptslinktop').href = '/prompts?key=' + encodeURIComponent(key);
 

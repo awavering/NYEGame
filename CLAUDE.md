@@ -19,11 +19,11 @@ Start with `DEVELOPMENT.md` (architecture, recipes) and the map at the top of `a
 ## Rules
 
 - All game state is the `state` dict in `app.py`. Change it only while holding `lock`, then call `save()`.
-- Guests' scores and photos are the point of the party. Never delete `state.json` or `uploads/` unless asked. Tests use a temp folder (`GAME_DATA_DIR`).
+- Guests' scores and photos are the point of the party. Never delete `state.json`, `uploads/` or `archive/` (past games) unless asked. Reset goes through `reset_game()`, which archives first. Tests use a temp folder (`GAME_DATA_DIR`).
 - `cards.json` is hot-reloaded and validated by `tools/check_cards.py`. A new card type or field needs updating in three places: that checker, `pages/play.html` (`drawCard`), and `app.py`. Add a test.
 - Pictures live in `pages/assets/` at native pixel size (see `tools/make_sprite.py`); `image` and `settings.mascot` in `cards.json` name them and the checker verifies the file exists.
 - Pages talk to the server only through `/api/*`. `tests/test_pages.py` fails if a page calls an endpoint that does not exist.
 - Use `hours_to_midnight()` / `current_phase()`, never `datetime.now()`, so `MIDNIGHT_ISO` and the tests can fake the clock.
 - Run exactly one server process (state is in memory).
 - No third-party scripts or fonts in the pages; party WiFi may not reach them.
-- Do not commit `.env`, `state.json`, `uploads/`, or `.dev-data/`.
+- Do not commit `.env`, `state.json`, `uploads/`, `archive/`, or `.dev-data/`.
