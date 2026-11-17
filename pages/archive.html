@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Past games</title>
+<style>
+  :root { --bg:#12101f; --card:#1f1b36; --well:#14112a; --line:#2c2750; --ink:#f4f1ff; --dim:#a9a3c9;
+          --accent:#ffcc33; --good:#3ddc97; --bad:#ff6b81; --chip:#3a3562; }
+  * { box-sizing:border-box; }
+  body { font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--ink); margin:0 auto; padding:16px; max-width:900px; }
+  h1 { margin:0 0 4px; }
+  h2 { margin:24px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:.12em; color:var(--accent); }
+  a { color:var(--accent); }
+  .dim { color:var(--dim); }
+  .top { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:baseline; margin-bottom:12px; }
+  input { width:100%; font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid var(--chip); background:var(--well); color:var(--ink); margin-bottom:8px; }
+  .card { background:var(--card); border-radius:14px; padding:14px 16px; margin-bottom:10px; }
+  a.card { display:block; text-decoration:none; color:var(--ink); }
+  a.card:hover { outline:2px solid var(--accent); }
+  .date { font-size:20px; font-weight:800; }
+  .facts { display:flex; flex-wrap:wrap; gap:4px 18px; font-size:14px; color:var(--dim); margin-top:4px; }
+  .facts b { color:var(--ink); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td, th { padding:5px 6px; border-bottom:1px solid var(--line); vertical-align:top; text-align:left; }
+  th { color:var(--dim); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+  td.num, th.num { text-align:right; white-space:nowrap; }
+  .photos { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+  .ph { background:var(--well); border-radius:10px; padding:6px; font-size:12px; color:var(--dim); }
+  .ph img { width:100%; border-radius:6px; display:block; margin-bottom:4px; }
+  .ph b { color:var(--ink); }
+  .chip { display:inline-block; background:var(--chip); border-radius:999px; padding:2px 10px; margin:2px 4px 2px 0; font-size:13px; }
+  .skip { color:var(--bad); } .bonus { color:var(--good); }
+  .thumb { height:44px; border-radius:6px; vertical-align:middle; }
+  .empty { padding:24px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="top">
+  <h1 id="title">Past games</h1>
+  <span class="dim" id="summary"></span>
+  <a id="backlink"></a>
+</div>
+<div id="list"></div>
+
+<script>
+/* ---------------------------------------------------------------
+   Past games page (host only). Every time a new game is started, the
+   one before it is saved in archive/<date>/ on the server. This page
+   reads those folders: first a list of games, then (after a click)
+   one game's scores, photos, polls and full log of answers.
+
+   Which view to show is in the address: ?game=2026-12-31 opens that
+   game, no "game" means the list. So the browser's Back button works.
+   --------------------------------------------------------------- */
+const params = new URLSearchParams(location.search);
+const key = params.get('key') || '';
+const gameName = params.get('game');
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const plural = (n, word) => `<b>${n}</b> ${word}${n === 1 ? '' : 's'}`;
+// Pictures are host only too, so the key goes on the end of each picture's address.
+const withKey = (url) => url + '?key=' + encodeURIComponent(key);
+const pageUrl = (game) => '/archive?key=' + encodeURIComponent(key) + (game ? '&game=' + encodeURIComponent(game) : '');
+// "2026-12-31-2" -> "Thursday, December 31, 2026 (game 2)"
+function niceDate(name) {
+  const [y, m, d, n] = name.split('-').map(Number);
+  const day = new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  return day + (n ? ` (game ${n})` : '');
+}
+const clock = (t) => new Date(t * 1000).toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+
+async function get(path) {
+  const r = await fetch(path, { headers: { 'X-Host-Key': key } });
+  if (r.status === 403) { $('#list').innerHTML = '<p class="empty">Wrong or missing key. Open this page with ?key=YOURKEY</p>'; return null; }
+  if (!r.ok) { $('#list').innerHTML = '<p class="empty">That game was not found.</p>'; return null; }
+  return r.json();
+}
+
+/* ---------- the list of games ---------- */
+async function showList() {
+  $('#backlink').textContent = '← Host controls';
+  $('#backlink').href = '/host?key=' + encodeURIComponent(key);
+  const d = await get('/api/host/archive');
+  if (!d) return;
+  $('#summary').innerHTML = d.games.length ? plural(d.games.length, 'saved game') : '';
+  $('#list').innerHTML = d.games.map(g => `<a class="card" href="${esc(pageUrl(g.name))}">
+      <div class="date">${esc(niceDate(g.name))}</div>
+      <div class="facts">
+        <span>${plural(g.players, 'player')}</span>
+        ${g.winner ? `<span>winner <b>${esc(g.winner)}</b> (${g.top_points} pts)</span>` : ''}
+        <span>${plural(g.done, 'card')} done</span>
+        <span>${plural(g.photos, 'photo')}</span>
+        <span>${plural(g.polls, 'poll')}</span>
+      </div>
+    </a>`).join('')
+    || '<p class="empty dim">No past games yet. A game is saved here when you press “Start a new game” on the host page.</p>';
+}
+
+/* ---------- one game ---------- */
+let game = null;
+
+async function showGame() {
+  $('#backlink').textContent = '← All past games';
+  $('#backlink').href = pageUrl();
+  $('#title').textContent = niceDate(gameName);
+  game = await get('/api/host/archive/' + encodeURIComponent(gameName));
+  if (!game) return;
+  $('#summary').innerHTML = `${plural(game.players.length, 'player')} · ${plural(game.photos.length, 'photo')} · ${plural(game.polls.length, 'poll')}`;
+
+  const scores = game.players.map((p, i) => `<tr><td class="num dim">${i + 1}</td><td><b>${esc(p.name)}</b></td>
+      <td class="num">${p.points}</td><td class="num">${p.done}</td><td class="num">${p.skipped}</td></tr>`).join('');
+
+  const photos = game.photos.map(ph => `<div class="ph"><a href="${esc(withKey(ph.url))}" target="_blank"><img src="${esc(withKey(ph.url))}" alt="" loading="lazy"></a>
+      <b>${esc(ph.name)}</b>${ph.hidden ? ' · hidden from TV' : ''}<br>${esc(ph.prompt)}</div>`).join('');
+
+  const polls = game.polls.map(p => `<div class="card"><b>${esc(p.question)}</b> <span class="dim">(${p.answers.length} answer${p.answers.length === 1 ? '' : 's'})</span><br>
+      ${p.answers.map(a => `<span class="chip">${esc(a.name)}: <b>${esc(a.value)}</b></span>`).join('') || '<span class="dim">Nobody answered.</span>'}</div>`).join('');
+
+  $('#list').innerHTML = `
+    <h2>Final scores</h2>
+    ${scores ? `<div class="card"><table><tr><th class="num">#</th><th>Player</th><th class="num">Points</th><th class="num">Done</th><th class="num">Skipped</th></tr>${scores}</table></div>` : '<p class="dim">No players.</p>'}
+    <h2>Photos <span class="dim">(${game.photos.length})</span></h2>
+    ${photos ? `<div class="photos">${photos}</div>` : '<p class="dim">No photos.</p>'}
+    <h2>Polls <span class="dim">(${game.polls.length})</span></h2>
+    ${polls || '<p class="dim">No polls.</p>'}
+    <h2>Everything that happened <span class="dim">(${game.history.length})</span></h2>
+    <input id="search" type="search" placeholder="Filter by player, prompt, answer or category" autocomplete="off">
+    <div class="card"><table id="log"></table></div>`;
+  $('#search').oninput = drawLog;
+  drawLog();
+}
+
+/* The full log, oldest first: every card done or skipped and every bonus. */
+function drawLog() {
+  const q = $('#search').value.trim().toLowerCase();
+  const rows = game.history.filter(h => !q || [h.name, h.prompt, h.answer, h.category].some(v => String(v || '').toLowerCase().includes(q)));
+  $('#log').innerHTML = rows.map(h => {
+    const what = h.result === 'declined' ? '<span class="skip">skipped</span>' : h.result === 'bonus' ? '<span class="bonus">bonus</span>' : 'done';
+    const pic = h.photo ? ` <a href="${esc(withKey(h.photo))}" target="_blank"><img class="thumb" src="${esc(withKey(h.photo))}" alt="photo" loading="lazy"></a>` : '';
+    return `<tr><td class="dim num">${esc(clock(h.t))}</td><td><b>${esc(h.name)}</b></td>
+      <td>${esc(h.prompt)}${h.answer ? `<br><span class="dim">answer:</span> <b>${esc(h.answer)}</b>` : ''}${pic}</td>
+      <td>${what}</td><td class="num">${h.points ? '+' + h.points : ''}</td></tr>`;
+  }).join('') || '<tr><td class="dim">Nothing matches.</td></tr>';
+}
+
+if (gameName) showGame(); else showList();
+</script>
+</body>
+</html>

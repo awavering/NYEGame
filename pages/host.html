@@ -20,7 +20,7 @@
 </style>
 </head>
 <body>
-<div class="row" style="justify-content:space-between"><h1>Host controls</h1><a id="promptslinktop" style="color:#ffcc33">All prompts →</a></div>
+<div class="row" style="justify-content:space-between"><h1>Host controls</h1><span><a id="archivelinktop" style="color:#ffcc33">Past games →</a> &nbsp; <a id="promptslinktop" style="color:#ffcc33">All prompts →</a></span></div>
 <div class="dim-t" id="status"></div><div class="msg" id="msg"></div>
 
 <section>
@@ -74,6 +74,7 @@
   <h2>Setup</h2>
   <div class="row"><a id="promptslink" style="color:#ffcc33" target="_blank">See all prompts (cards, points, stats)</a></div>
   <div class="row"><a id="printlink" style="color:#ffcc33" target="_blank">Print the secret QR codes</a></div>
+  <div class="row"><a id="archivelink" style="color:#ffcc33" target="_blank">Browse past games (scores, photos, answers)</a></div>
   <div class="row"><button class="red" id="reset">Start a new game (this one is saved)</button></div>
 </section>
 
@@ -147,6 +148,7 @@ $('#finaleoff').onclick = () => call('/api/host/finale', { on: false });
 $('#reset').onclick = () => { if (confirm('Start a new game? Players, scores and photos are saved to the archive first.')) call('/api/host/reset'); };
 $('#printlink').href = '/host/print?key=' + encodeURIComponent(key);
 $('#promptslink').href = $('#promptslinktop').href = '/prompts?key=' + encodeURIComponent(key);
+$('#archivelink').href = $('#archivelinktop').href = '/archive?key=' + encodeURIComponent(key);
 
 load(); setInterval(load, 4000);
 </script>

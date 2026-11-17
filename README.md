@@ -80,6 +80,8 @@ such as `"dog.png"`, shown on the TV when someone gives it a caption: see Mascot
 - **Photos**: tap one to hide or show it on the TV.
 - **All prompts** (link at the top, or `/prompts?key=...`): every card with its points, settings,
   secret codes, time-of-night weights, and how often it has been dealt, done and skipped tonight.
+- **Past games** (link at the top, or `/archive?key=...`): every earlier game with its final
+  scores, photos, polls and full log (see Past games).
 - **Print the secret QR codes**: prints the QR tags for the scavenger-hunt cards.
 - **Start a new game**: clears players, scores, and photos for a fresh start. Use it after
   rehearsal! Nothing is thrown away: the old game is saved first (see Past games).
@@ -104,8 +106,10 @@ for example `archive/2026-12-31/` (a second game the same day gets `2026-12-31-2
 - `uploads/`: all the photos and drawings.
 - `cards.json`: the cards as they were that night.
 
-These are plain files; nothing reads them back into the game. Delete a folder if you
-don't want to keep that game (a rehearsal, say).
+Browse them on the **Past games** page (link at the top of the host page, or
+`/archive?key=...`): pick a night to see its final scores, photos, polls and the full log
+of who did what. These are plain files and are never loaded back into a live game. Delete
+a folder if you don't want to keep that game (a rehearsal, say).
 
 ## Sensors need https
 
@@ -132,6 +136,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md). The short version:
 - `pages/assets/`: pictures used by cards and the TV mascot
 - `tests/`: the automated tests; `Makefile`: shortcuts; `.github/workflows/ci.yml`: runs the checks on GitHub
 - `cards.json`: your tasks and settings
-- `pages/play.html`: phone page; `pages/tv.html`: TV page; `pages/host.html`: host page
+- `pages/play.html`: phone page; `pages/tv.html`: TV page; `pages/host.html`: host page;
+  `pages/prompts.html` and `pages/archive.html`: the host's All prompts and Past games pages
 - `state.json` and `uploads/`: the game in progress, created while running
 - `archive/`: past games, one dated folder each (see Past games)

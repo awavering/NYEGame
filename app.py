@@ -13,6 +13,7 @@ Map of this file (top to bottom):
   Cards        load_cards(): cards.json, re-read when edited, validated
   State        one dict (`state`) guarded by `lock`, saved with save()
   Archive      archive_game() / reset_game(): a finished game moves to archive/<date>/
+               (the Past games page reads those folders: /api/host/archive)
   Time         hours_to_midnight() / current_phase() drive card weights
   Dealing      pick_card() chooses the next card, finish() records the result
   Pages + QR   the HTML pages and generated QR images
@@ -34,6 +35,7 @@ import json
 import math
 import os
 import random
+import re
 import secrets
 import shutil
 import socket
@@ -248,6 +250,68 @@ def reset_game():
         state.update(fresh_state())
         save()
     return name
+
+
+# Archive folder names are a date, plus -2, -3... for more games that day.
+# Checking the shape also stops a made-up name from reaching other folders.
+ARCHIVE_NAME = re.compile(r"\d{4}-\d{2}-\d{2}(-\d+)?")
+
+
+def read_archive(name):
+    """The saved state of one past game, or None if there is no such game."""
+    if not ARCHIVE_NAME.fullmatch(name or ""):
+        return None
+    try:
+        with open(os.path.join(ARCHIVE, name, "state.json"), encoding="utf-8") as f:
+            saved = json.load(f)
+    except (OSError, ValueError):
+        return None
+    game = fresh_state()  # so a game saved by older code still has every key
+    game.update(saved)
+    return game
+
+
+def archive_names():
+    """Past games, newest first (-10 sorts after -9, not after -1)."""
+    if not os.path.isdir(ARCHIVE):
+        return []
+    names = [n for n in os.listdir(ARCHIVE) if ARCHIVE_NAME.fullmatch(n)]
+    return sorted(names, key=lambda n: (n[:10], int(n[11:] or 1)), reverse=True)
+
+
+def archive_polls(game):
+    """Every poll of a past game with its answers: [{question, kind, answers: [{name, value}]}].
+
+    The poll log holds the last polls of the night with each guest's final
+    answer. Polls that fell off that log are rebuilt from poll_answers."""
+    names = {pid: p["name"] for pid, p in game["players"].items()}
+    polls, seen = [], set()
+    for poll in game["poll_log"] + ([game["poll"]] if game["poll"] else []):
+        seen.add(poll["id"])
+        answers = [{"name": names.get(pid, "?"), "value": v} for pid, v in poll["answers"].items()]
+        polls.append(
+            {"question": poll["question"], "kind": poll["kind"], "t": poll.get("t"), "answers": answers}
+        )
+    older = {}
+    for a in game["poll_answers"]:
+        if a["poll_id"] not in seen:
+            poll = older.setdefault(
+                a["poll_id"], {"question": a["question"], "kind": "text", "t": a["t"], "latest": {}}
+            )
+            poll["latest"][a["pid"]] = {
+                "name": a["name"],
+                "value": a["value"],
+            }  # a later answer replaces an earlier one
+    for poll in older.values():
+        polls.append(
+            {
+                "question": poll["question"],
+                "kind": poll["kind"],
+                "t": poll["t"],
+                "answers": list(poll["latest"].values()),
+            }
+        )
+    return sorted(polls, key=lambda p: p["t"] or 0)
 
 
 # --------------------------------------------------------------------------
@@ -488,6 +552,21 @@ def prompts_page():
     # Host only: it lists every card, including the secret QR codes.
     check_host()
     return send_from_directory(PAGES, "prompts.html")
+
+
+@app.get("/archive")
+def archive_page():
+    # Host only: past games include photos the host hid from the TV.
+    check_host()
+    return send_from_directory(PAGES, "archive.html")
+
+
+@app.get("/archive/photos/<name>/<path:file>")
+def archive_photo(name, file):
+    check_host()
+    if not ARCHIVE_NAME.fullmatch(name):
+        abort(404)
+    return send_from_directory(os.path.join(ARCHIVE, name, "uploads"), file)
 
 
 @app.get("/s/<code>")
@@ -1122,6 +1201,85 @@ def host_cards():
                 "phase": current_phase(),
             }
         )
+
+
+@app.get("/api/host/archive")
+def host_archive():
+    """The list of past games, newest first, with a one-line summary of each."""
+    check_host()
+    games = []
+    for name in archive_names():
+        game = read_archive(name)
+        if not game:
+            continue
+        players = sorted(game["players"].values(), key=lambda p: -p["points"])
+        games.append(
+            {
+                "name": name,
+                "players": len(players),
+                "winner": players[0]["name"] if players else None,
+                "top_points": players[0]["points"] if players else 0,
+                "done": sum(1 for h in game["history"] if h["result"] == "done"),
+                "photos": len(game["photos"]),
+                "polls": len(archive_polls(game)),
+            }
+        )
+    return jsonify({"games": games})
+
+
+@app.get("/api/host/archive/<name>")
+def host_archive_game(name):
+    """Everything about one past game: scores, photos, polls and the full log."""
+    check_host()
+    game = read_archive(name)
+    if not game:
+        return jsonify({"error": "There is no saved game with that name."}), 404
+    tally = {}  # pid -> cards done / skipped
+    for h in game["history"]:
+        if h["result"] in ("done", "declined"):
+            counts = tally.setdefault(h["pid"], {"done": 0, "declined": 0})
+            counts[h["result"]] += 1
+    players = [
+        {
+            "name": p["name"],
+            "points": p["points"],
+            "done": tally.get(pid, {}).get("done", 0),
+            "skipped": tally.get(pid, {}).get("declined", 0),
+        }
+        for pid, p in game["players"].items()
+    ]
+    players.sort(key=lambda p: -p["points"])
+    files = {ph["id"]: ph["file"] for ph in game["photos"]}
+    photo_url = lambda file: f"/archive/photos/{name}/{file}"  # noqa: E731
+    return jsonify(
+        {
+            "name": name,
+            "players": players,
+            "photos": [
+                {
+                    "url": photo_url(ph["file"]),
+                    "name": ph["name"],
+                    "prompt": ph["prompt"],
+                    "hidden": ph["status"] == "hidden",
+                }
+                for ph in game["photos"]
+            ],
+            "polls": archive_polls(game),
+            "history": [
+                {
+                    "t": h["t"],
+                    "name": h["name"],
+                    "category": h["category"],
+                    "prompt": h["prompt"],
+                    "result": h["result"],
+                    "answer": h["answer"],
+                    "points": h["points"],
+                    "photo": photo_url(files[h["photo"]]) if h.get("photo") in files else None,
+                }
+                for h in game["history"]
+            ],
+        }
+    )
 
 
 @app.post("/api/host/poll")
