@@ -20,7 +20,15 @@ def test_public_pages_load(client, path):
 
 
 def test_host_pages_need_the_key(client):
-    for path in ("/host", "/host/print", "/prompts", "/api/host/data", "/api/host/cards"):
+    for path in (
+        "/host",
+        "/host/print",
+        "/prompts",
+        "/archive",
+        "/api/host/data",
+        "/api/host/cards",
+        "/api/host/archive",
+    ):
         assert client.get(path).status_code == 403
         assert client.get(f"{path}?key={game.HOST_KEY}").status_code == 200
 
@@ -717,3 +725,70 @@ def test_prompts_page_lists_every_card_with_tonights_stats(client, make_player, 
     qr = next(c for c in data["cards"] if c["type"] == "secret_qr")
     assert qr["code"] and qr["location"]  # host only, so the secret codes are included
     assert data["phase"] == "early" and data["draw_things"]
+
+
+# ---------------------------------------------------------------- past games page
+
+
+def played_and_archived(client, make_player, host):
+    """A short game (a card, a photo, a poll), then reset. Returns the archive folder name."""
+    ann, ben = make_player("Ann"), make_player("Ben")
+    ann.give("get_drink")
+    ann.respond("get_drink")
+    ben.give("get_drink")
+    ben.respond("get_drink", "decline")
+    ann.give("selfie")
+    ann.upload("selfie")
+    client.post("/api/host/poll", json={"question": "Best snack?", "kind": "text"}, headers=host)
+    ann.poll_answer("chips")
+    ann.poll_answer("dip")
+    ben.poll_answer("chips")
+    return client.post("/api/host/reset", headers=host).get_json()["archive"]
+
+
+def test_past_games_are_listed_newest_first(client, make_player, host):
+    assert client.get("/api/host/archive", headers=host).get_json() == {"games": []}
+    first = played_and_archived(client, make_player, host)
+    make_player("Cat")
+    second = client.post("/api/host/reset", headers=host).get_json()["archive"]
+    games = client.get("/api/host/archive", headers=host).get_json()["games"]
+    assert [g["name"] for g in games] == [second, first]
+    old = games[1]
+    assert (old["players"], old["winner"], old["photos"], old["polls"]) == (2, "Ann", 1, 1)
+    assert old["done"] == 2  # Ann's drink and her selfie
+
+
+def test_a_past_game_shows_scores_photos_polls_and_the_log(client, make_player, host):
+    name = played_and_archived(client, make_player, host)
+    game_ = client.get(f"/api/host/archive/{name}", headers=host).get_json()
+    assert [p["name"] for p in game_["players"]] == ["Ann", "Ben"]
+    assert (game_["players"][0]["done"], game_["players"][1]["skipped"]) == (2, 1)
+    poll = game_["polls"][0]
+    assert poll["question"] == "Best snack?"
+    assert sorted((a["name"], a["value"]) for a in poll["answers"]) == [("Ann", "dip"), ("Ben", "chips")]
+    selfie = next(h for h in game_["history"] if h["photo"])
+    assert selfie["photo"] == game_["photos"][0]["url"]
+    assert client.get(selfie["photo"], headers=host).status_code == 200  # the picture itself
+    assert client.get(selfie["photo"]).status_code == 403  # host only
+    assert client.get(f"/api/host/archive/{name}").status_code == 403
+
+
+def test_a_past_game_that_does_not_exist_is_a_404(client, host):
+    for name in ("2020-01-01", "nope", "..", "2026-12-31-x"):
+        assert client.get(f"/api/host/archive/{name}", headers=host).status_code == 404
+    assert client.get("/archive/photos/nope/x.jpg", headers=host).status_code == 404
+
+
+def test_polls_that_fell_off_the_poll_log_are_still_in_the_archive(client, make_player, host, monkeypatch):
+    monkeypatch.setattr(game, "POLL_LOG_SIZE", 1)
+    ann = make_player("Ann")
+    for question in ("Q1", "Q2", "Q3"):
+        client.post("/api/host/poll", json={"question": question, "kind": "text"}, headers=host)
+        ann.poll_answer(question.lower())
+    name = client.post("/api/host/reset", headers=host).get_json()["archive"]
+    polls = client.get(f"/api/host/archive/{name}", headers=host).get_json()["polls"]
+    assert [(p["question"], p["answers"][0]["value"]) for p in polls] == [
+        ("Q1", "q1"),
+        ("Q2", "q2"),
+        ("Q3", "q3"),
+    ]

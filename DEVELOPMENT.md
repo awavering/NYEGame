@@ -46,8 +46,16 @@ Reset (the host page button, `/api/host/reset`, or `make reset`) calls
 `reset_game()`, which first calls `archive_game()`. That writes the whole
 `state` dict to `archive/<date>/state.json`, copies `cards.json` beside it and
 moves the photos into `archive/<date>/uploads/`, all inside `GAME_DATA_DIR`.
-An empty game is not archived. Nothing reads the archive back; it is a record.
-Anything new you add to `state` is archived automatically.
+An empty game is not archived. Anything new you add to `state` is archived
+automatically.
+
+The Past games page (`pages/archive.html`, at `/archive`) is the only reader.
+It lists the folders through `/api/host/archive`, shows one game through
+`/api/host/archive/<name>`, and loads pictures from
+`/archive/photos/<name>/<file>`. All three need the host key, because the
+archive includes photos the host hid. The archive is never loaded back into
+`state`. To show something new there, add it to `host_archive_game()` and
+draw it in `showGame()`.
 
 ### The API
 
@@ -55,7 +63,7 @@ Anything new you add to `state` is archived automatically.
 |---|---|
 | phones | `GET /api/me`, `POST /api/join`, `/api/card/respond`, `/api/card/start`, `/api/card/photo`, `/api/secret`, `/api/flash/claim`, `/api/poll/answer`, `/api/icon/found` |
 | TV | `GET /api/tv`, `GET /api/config` |
-| host | `GET /api/host/data`, `GET /api/host/cards` (prompts page), `POST /api/host/poll`, `/poll/<close\|clear>`, `/icons/<start\|clear>`, `/flash`, `/finale`, `/photo`, `/reset` |
+| host | `GET /api/host/data`, `GET /api/host/cards` (prompts page), `GET /api/host/archive` and `/api/host/archive/<name>` (past games page), `POST /api/host/poll`, `/poll/<close\|clear>`, `/icons/<start\|clear>`, `/flash`, `/finale`, `/photo`, `/reset` |
 
 Host calls need the key (`?key=` or an `X-Host-Key` header).
 
@@ -207,4 +215,4 @@ the server needs no restart.
 - **Photos are only moderated by hiding.** `approve_photos` makes new photos wait for the host.
 - **One party at a time per data folder.** Use `make reset` or the host page between events; the finished game goes to `archive/`.
 - **The TV spotlights new photos** at most once every 15 seconds (`SPOT_GAP_MS` in `tv.html`), so a busy party doesn't hide the scoreboard.
-- Ideas not built: a page for browsing past games in `archive/`, a results export, per-card stats on the host page, a host "undo points" button, sound on the TV at milestones, rate-limiting uploads.
+- Ideas not built: a results export, per-card stats on the host page, a host "undo points" button, sound on the TV at milestones, rate-limiting uploads.
