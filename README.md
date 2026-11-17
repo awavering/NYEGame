@@ -81,7 +81,8 @@ such as `"dog.png"`, shown on the TV when someone gives it a caption: see Mascot
 - **All prompts** (link at the top, or `/prompts?key=...`): every card with its points, settings,
   secret codes, time-of-night weights, and how often it has been dealt, done and skipped tonight.
 - **Print the secret QR codes**: prints the QR tags for the scavenger-hunt cards.
-- **Reset**: wipes players, scores, and photos. Use it after rehearsal!
+- **Start a new game**: clears players, scores, and photos for a fresh start. Use it after
+  rehearsal! Nothing is thrown away: the old game is saved first (see Past games).
 
 ## Scoring
 
@@ -92,6 +93,19 @@ Points should match effort. Text answers and "Done" buttons can't be checked, so
 worth 1. Photos, drawings and scavenger hunts are worth 3 to 5. Skipping is free once,
 but a second skip in a row waits `skip_wait_seconds` (default 20). Doing a card ends the
 wait. Without this, the best strategy is to skip everything hard and tap through the easy cards.
+
+## Past games
+
+Every time you start a new game, the one that just ended is saved in a dated folder,
+for example `archive/2026-12-31/` (a second game the same day gets `2026-12-31-2`):
+
+- `state.json`: the players and their scores, every card that was done or skipped (who,
+  when, the prompt, the answer, the points), and every poll answer anyone gave.
+- `uploads/`: all the photos and drawings.
+- `cards.json`: the cards as they were that night.
+
+These are plain files; nothing reads them back into the game. Delete a folder if you
+don't want to keep that game (a rehearsal, say).
 
 ## Sensors need https
 
@@ -119,4 +133,5 @@ See [DEVELOPMENT.md](DEVELOPMENT.md). The short version:
 - `tests/`: the automated tests; `Makefile`: shortcuts; `.github/workflows/ci.yml`: runs the checks on GitHub
 - `cards.json`: your tasks and settings
 - `pages/play.html`: phone page; `pages/tv.html`: TV page; `pages/host.html`: host page
-- `state.json` and `uploads/`: created while running; delete both for a clean start
+- `state.json` and `uploads/`: the game in progress, created while running
+- `archive/`: past games, one dated folder each (see Past games)

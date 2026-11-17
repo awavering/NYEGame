@@ -46,9 +46,8 @@ cards:  ## check cards.json for mistakes
 
 check: lint cards test  ## everything CI runs: lint, cards, tests
 
-reset:  ## wipe the real game's saved state and photos (new game)
-	rm -f state.json state.json.tmp uploads/*.jpg
-	@echo "Cleared state.json and uploads/"
+reset:  ## start a new game (the old one is saved in archive/ first; stop the server before running this)
+	@$(PY) -c "import app; name = app.reset_game(); print('Saved the old game in archive/' + name if name else 'Nothing to save'); print('New game ready')"
 
 hooks:  ## run `make check` automatically before every commit
 	git config core.hooksPath .githooks

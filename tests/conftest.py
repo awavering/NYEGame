@@ -4,6 +4,7 @@ Every test gets an empty game, a fake clock (5 hours before midnight, so it
 is the "early" phase), and a throwaway data folder.
 """
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ def clean_game(monkeypatch):
         game.state.update(game.fresh_state())
     for photo in Path(game.UPLOADS).glob("*.jpg"):
         photo.unlink()
+    shutil.rmtree(game.ARCHIVE, ignore_errors=True)
     monkeypatch.setattr(game, "hours_to_midnight", lambda: 5.0)
 
 

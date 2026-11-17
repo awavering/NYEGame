@@ -2,6 +2,11 @@
 state.json
 state.json.tmp
 uploads/
+archive/
+
+# the server's data folder and virtualenv (see DEVELOPMENT.md, NearlyFreeSpeech)
+data/
+venv/
 
 # local environment and tool caches
 .env
