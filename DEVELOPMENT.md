@@ -148,6 +148,45 @@ Render's disk is wiped on every deploy and restart, and free instances restart
 after 15 idle minutes. Without a persistent disk mounted at `GAME_DATA_DIR`,
 scores and photos vanish on restart. Don't deploy during the party.
 
+### NearlyFreeSpeech (nye.albertwavering.com)
+
+The live game runs on the NFSN site `nyegame` (Apache 2.4 Generic).
+
+| Piece | Where |
+|---|---|
+| Code | `/home/protected/NYEGame` (a git clone of this repo) |
+| Settings and host key | `/home/protected/NYEGame/.env` (not in git; group `web`, mode 640) |
+| Game data | `/home/protected/NYEGame/data` (`GAME_DATA_DIR`; group `web`, mode 775) |
+| Start script | `/home/protected/run.sh` |
+| Daemon | tag `nye`, runs `run.sh` as `web` |
+| Proxy | HTTP, `/` to `/`, port 8080 |
+
+**Update the code:** `cd /home/protected/NYEGame && git pull`, then stop and
+start the `nye` daemon on the Site Information page. Editing `cards.json` on
+the server needs no restart.
+
+**Things that are different on NFSN**
+
+- Flask, Pillow and gunicorn come from NFSN's system Python (3.11), so the
+  venv is created with `--system-site-packages` and pip only adds `qrcode`.
+  There is no `venv/bin/gunicorn`; `run.sh` starts it with
+  `venv/bin/python -m gunicorn -w 1 --threads 8 -b 127.0.0.1:8080 app:app`.
+- The daemon runs as `web`, not as you. Anything it must read or write needs
+  group `web` (`chgrp web <path>`).
+- DNS and HTTPS for the alias were set up automatically, because the domain's
+  DNS is hosted at NFSN.
+- The panel's "Run Shell Command" works without SSH, but commands are cut off
+  at 220 characters and output shows up in Recent Event Log about 20 seconds later.
+- Daemon output and errors go to `/home/logs`.
+
+**Before the party**
+
+- The site is on the Non-Production plan (1 GiB/day bandwidth). Switch to
+  Production under Billing Information for party night.
+- If `.env` fails to load, the host key falls back to `albert`. Check that
+  `/host?key=albert` returns 403.
+- Reset from the host page so rehearsal scores and photos are gone.
+
 ## Known limits and ideas
 
 - **Polling, not push.** A 1 to 2 second lag. If it ever bothers you, Server-Sent Events are the smallest upgrade.
